@@ -85,11 +85,18 @@ JSON FORMAT:
 "description": "Detailed outfit description in {request.language} with translated colors",
 "suggestion_tip": "Styling advice in {request.language} for the occasion",
 "pinterest_links": [
-{{"title": "Color combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=colors+{request.language}"}},
-{{"title": "Occasion styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=occasion+{request.language}"}},
-{{"title": "Weather outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=weather+{request.language}"}}
+{{"title": "Specific color + gender combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=selected+colors+{gender}+kombin+{request.language}"}},
+{{"title": "Gender + occasion specific styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+occasion+outfit+{request.language}"}},
+{{"title": "Gender + weather appropriate outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+weather+kıyafet+{request.language}"}}
 ]
-}}"""
+}}
+
+PINTEREST EXAMPLES:
+✓ "Mavi ve Beyaz Erkek Kombin Önerileri"
+✓ "Erkek Şehir Turu Kıyafet Fikirleri"  
+✓ "Sıcak Hava Erkek Casual Kombinler"
+✗ "Renk kombinasyonları" (too generic)
+✗ "Günlük stil önerileri" (no gender, too vague)"""
     
     return prompt
 
