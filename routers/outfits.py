@@ -38,52 +38,64 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
         
     return {"user_id": user_id, "gender": user_data.get("gender", "unisex")}
 
+# Renk çevirisi fonksiyonunu kaldırdık - GPT kendisi çevirecek
 
 def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
     """Optimize edilmiş prompt - GPT kendisi renk çevirisini yapacak"""
     
+    # Wardrobe'ı olduğu gibi listele (renk çevirisi yapmadan)
     wardrobe_items = []
     for item in request.wardrobe:
         wardrobe_items.append(f"{item.id}|{item.name}|{item.category}|{item.color}")
     
     wardrobe_str = "\n".join(wardrobe_items)
 
-    avoid_items = ""
-    if request.last_5_outfits:
-        recent_names = []
-        for outfit in request.last_5_outfits:
-            for it_id in outfit.items:
-                item = next((it for it in request.wardrobe if it.id == it_id), None)
-                if item:
-                    recent_names.append(item.name)
-        avoid_items = f"AVOID: {', '.join(set(recent_names))}" if recent_names else ""
+    # AVOID items kısmını kaldırdık
+    # avoid_items = ""
+    # if request.last_5_outfits:
+    #     recent_names = []
+    #     for outfit in request.last_5_outfits:
+    #         for it_id in outfit.items:
+    #             item = next((it for it in request.wardrobe if it.id == it_id), None)
+    #             if item:
+    #                 recent_names.append(item.name)
+    #     avoid_items = f"AVOID: {', '.join(set(recent_names))}" if recent_names else ""
 
+    # Basit ve net prompt
     prompt = f"""Fashion stylist for {gender} user. Respond ONLY in {request.language}.
 
-    WARDROBE (ID|Name|Category|Color):
-    {wardrobe_str}
+WARDROBE (ID|Name|Category|Color):
+{wardrobe_str}
 
-    CONTEXT: Weather={request.weather_condition}, Occasion={request.occasion}
-    {avoid_items}
+CONTEXT: Weather={request.weather_condition}, Occasion={request.occasion}
 
-    RULES:
-    1. Select 3-4 items: 1 top + 1 bottom + 1 footwear + optional outerwear
-    2. Use EXACT IDs/names/categories from wardrobe
-    3. Warm weather = NO jackets
-    4. Translate color names to {request.language} in descriptions only
-    5. All text in {request.language}
+CRITICAL RULES - MUST FOLLOW:
+1. Select 3-4 items: 1 top + 1 bottom + 1 footwear + optional outerwear
+2. Use EXACT IDs/names/categories from wardrobe
+3. Warm weather = NO jackets/blazers
+4. Translate ALL color names to {request.language} in descriptions:
+   - ivory → krem, burgundy → bordo, royalblue → koyu mavi, 
+   - skyblue → açık mavi, charcoal → koyu gri, scarlet → al kırmızısı
+5. Write detailed, professional descriptions in {request.language}
 
-    JSON FORMAT:
-    {{
-    "items": [{{"id": "exact_id", "name": "exact_name", "category": "exact_category"}}],
-    "description": "Brief outfit description in {request.language} with translated color names",
-    "suggestion_tip": "Quick styling tip in {request.language}",
-    "pinterest_links": [
-    {{"title": "Natural title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=keywords+{request.language}"}},
-    {{"title": "Style title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=style+{request.language}"}},
-    {{"title": "Occasion title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=occasion+{request.language}"}}
-    ]
-    }}"""
+JSON FORMAT:
+{{
+"items": [{{"id": "exact_id", "name": "exact_name", "category": "exact_category"}}],
+"description": "Detailed outfit description in {request.language} explaining color harmony and styling approach (min 2 sentences)",
+"suggestion_tip": "Specific styling advice in {request.language} mentioning colors and occasion appropriateness (min 2 sentences)",
+"pinterest_links": [
+{{"title": "Specific color combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=specific+color+combination+{request.language}"}},
+{{"title": "Occasion-specific styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=occasion+styling+{request.language}"}},
+{{"title": "Weather-appropriate outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=weather+appropriate+outfit+{request.language}"}}
+]
+}}
+
+EXAMPLE PINTEREST TITLES:
+✓ "Krem ve Bordo Renk Kombinleri için İlham"
+✓ "Doğum Günü Partisi Erkek Kıyafet Önerileri"  
+✓ "Sıcak Hava için Şık Kombinler"
+✗ "Doğal stil" (too vague)
+✗ "Şıklık" (too general)"""
     
     return prompt
 
@@ -92,11 +104,14 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
     """Outfit önerisi oluşturur - client'ten gelen gender bilgisini kullanır"""
     user_id = user_info["user_id"]
     
+    # Client'ten gelen gender bilgisini öncelikle kullan
     if request.gender and request.gender in ['male', 'female']:
         gender = request.gender
     else:
+        # Fallback: database'den al
         gender = user_info.get("gender", "unisex")
     
+    # Eğer hala cinsiyet bilgisi yoksa default olarak "unisex" kullan
     if not gender:
         gender = "unisex"
     
@@ -110,21 +125,24 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=1000,
-            top_p=0.9
+            temperature=0.3,  # Daha düşük temperature = daha hızlı
+            max_tokens=800,   # Token limiti = daha hızlı
+            top_p=0.9        # Daha fokuslu yanıtlar = daha hızlı
         )
         
         response_content = completion.choices[0].message.content
         if not response_content:
             raise HTTPException(status_code=500, detail="AI returned an empty response.")
         
+        # Basitleştirilmiş validasyon
         try:
             outfit_response = json.loads(response_content)
             
+            # Sadece temel kontroller
             if not outfit_response.get("items"):
                 raise HTTPException(status_code=500, detail="No items returned.")
             
+            # Footwear kontrolü (daha hızlı)
             categories = [item.get("category", "").lower() for item in outfit_response.get("items", [])]
             footwear_categories = {"sneakers", "sandals", "shoes", "boots"}
             
@@ -134,6 +152,7 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Invalid JSON.")
         
+        # Usage'ı artır
         db.collection('users').document(user_id).update({
             'usage.count': firestore.Increment(1),
             'usage.date': str(date.today())
@@ -142,6 +161,7 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         return outfit_response
         
     except HTTPException:
+        # HTTP exceptions'ları tekrar raise et
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get suggestion from AI: {str(e)}")
