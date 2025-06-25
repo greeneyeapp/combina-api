@@ -50,52 +50,46 @@ def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
     
     wardrobe_str = "\n".join(wardrobe_items)
 
-    # AVOID items kısmını kaldırdık
-    # avoid_items = ""
-    # if request.last_5_outfits:
-    #     recent_names = []
-    #     for outfit in request.last_5_outfits:
-    #         for it_id in outfit.items:
-    #             item = next((it for it in request.wardrobe if it.id == it_id), None)
-    #             if item:
-    #                 recent_names.append(item.name)
-    #     avoid_items = f"AVOID: {', '.join(set(recent_names))}" if recent_names else ""
+    # Son 5 kombin kontrolü (tekrar vermeme için)
+    recent_items_info = ""
+    if request.last_5_outfits:
+        recent_items = []
+        for outfit in request.last_5_outfits:
+            for item_id in outfit.items:
+                item = next((it for it in request.wardrobe if it.id == item_id), None)
+                if item:
+                    recent_items.append(f"{item.name}({item.category})")
+        if recent_items:
+            recent_items_info = f"RECENTLY USED: {', '.join(set(recent_items))} - Try to suggest different items for variety."
 
-    # Basit ve net prompt
+    # Basit ve generic prompt
     prompt = f"""Fashion stylist for {gender} user. Respond ONLY in {request.language}.
 
 WARDROBE (ID|Name|Category|Color):
 {wardrobe_str}
 
 CONTEXT: Weather={request.weather_condition}, Occasion={request.occasion}
+{recent_items_info}
 
-CRITICAL RULES - MUST FOLLOW:
+RULES:
 1. Select 3-4 items: 1 top + 1 bottom + 1 footwear + optional outerwear
 2. Use EXACT IDs/names/categories from wardrobe
 3. Warm weather = NO jackets/blazers
-4. Translate ALL color names to {request.language} in descriptions:
-   - ivory → krem, burgundy → bordo, royalblue → koyu mavi, 
-   - skyblue → açık mavi, charcoal → koyu gri, scarlet → al kırmızısı
-5. Write detailed, professional descriptions in {request.language}
+4. Translate color names to {request.language} in descriptions
+5. Consider the occasion and weather when selecting
+6. Try to create variety - don't always pick the same items
 
 JSON FORMAT:
 {{
 "items": [{{"id": "exact_id", "name": "exact_name", "category": "exact_category"}}],
-"description": "Detailed outfit description in {request.language} explaining color harmony and styling approach (min 2 sentences)",
-"suggestion_tip": "Specific styling advice in {request.language} mentioning colors and occasion appropriateness (min 2 sentences)",
+"description": "Detailed outfit description in {request.language} with translated colors",
+"suggestion_tip": "Styling advice in {request.language} for the occasion",
 "pinterest_links": [
-{{"title": "Specific color combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=specific+color+combination+{request.language}"}},
-{{"title": "Occasion-specific styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=occasion+styling+{request.language}"}},
-{{"title": "Weather-appropriate outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=weather+appropriate+outfit+{request.language}"}}
+{{"title": "Color combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=colors+{request.language}"}},
+{{"title": "Occasion styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=occasion+{request.language}"}},
+{{"title": "Weather outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=weather+{request.language}"}}
 ]
-}}
-
-EXAMPLE PINTEREST TITLES:
-✓ "Krem ve Bordo Renk Kombinleri için İlham"
-✓ "Doğum Günü Partisi Erkek Kıyafet Önerileri"  
-✓ "Sıcak Hava için Şık Kombinler"
-✗ "Doğal stil" (too vague)
-✗ "Şıklık" (too general)"""
+}}"""
     
     return prompt
 
@@ -125,9 +119,10 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.3,  # Daha düşük temperature = daha hızlı
+            temperature=0.8,  # 0.3'ten 0.8'e çıkar = daha çeşitli seçimler
             max_tokens=800,   # Token limiti = daha hızlı
-            top_p=0.9        # Daha fokuslu yanıtlar = daha hızlı
+            top_p=0.9,        # Daha fokuslu yanıtlar = daha hızlı
+            seed=None         # Random seed = her seferinde farklı
         )
         
         response_content = completion.choices[0].message.content
