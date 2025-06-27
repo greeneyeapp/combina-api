@@ -42,6 +42,7 @@ class PinterestLink(BaseModel):
 class OutfitRequest(BaseModel):
     language: str = Field(..., alias='language')
     gender: Optional[str] = Field(None, alias='gender')
+    plan: str = Field(..., alias='plan') 
     wardrobe: List[ClothingItem] = Field(..., alias='wardrobe')
     last_5_outfits: List[Outfit] = Field(..., alias='last_5_outfits')
     weather_condition: str = Field(..., alias='weather_condition')
@@ -67,7 +68,7 @@ class OutfitResponse(BaseModel):
     items: List[SuggestedItem]
     description: str
     suggestion_tip: Optional[str] = None
-    pinterest_links: List[PinterestLink]  
+    pinterest_links: Optional[List[PinterestLink]] = None
 
     class Config:
         allow_population_by_field_name = True
