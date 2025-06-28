@@ -8,3 +8,6 @@ passlib[bcrypt]
 httpx
 openai
 firebase-admin
+requests
+PyJWT
+cryptography

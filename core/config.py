@@ -7,6 +7,13 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     GOOGLE_APPLICATION_CREDENTIALS: str
+    
+    # Yeni OAuth ayarları
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    APPLE_CLIENT_ID: str = ""  # Bundle ID
+    APPLE_TEAM_ID: str = ""
+    APPLE_KEY_ID: str = ""
 
     class Config:
         env_file = ".env"

@@ -9,6 +9,20 @@ class Token(BaseModel):
 class IdToken(BaseModel):
     id_token: str
 
+# OAuth için yeni modeller
+class GoogleAuthRequest(BaseModel):
+    access_token: str
+
+class AppleAuthRequest(BaseModel):
+    identity_token: str
+    authorization_code: Optional[str] = None
+    user_info: Optional[dict] = None
+
+class UserInfoUpdate(BaseModel):
+    name: str
+    gender: str
+    birthDate: str
+
 class ClothingItem(BaseModel):
     id: str
     name: str
