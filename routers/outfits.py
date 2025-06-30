@@ -2,22 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from openai import OpenAI
 import json
 from datetime import date
+from firebase_admin import firestore
 
-# Gerekli import'lar
 from core.config import settings
 from core.security import get_current_user_id
 from schemas import OutfitRequest, OutfitResponse, ClothingItem
 
-from firebase_setup import db, firestore
-
 router = APIRouter(prefix="/api", tags=["outfits"])
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
+db = firestore.client()
 
-# Plan limitleri
 PLAN_LIMITS = {"free": 2, "standard": 10, "premium": 50}
 
 async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_id)):
-    """Kullanım (usage) kontrolü yapar ve kullanıcı verilerini döndürür."""
+    """Usage kontrolü yapar ve kullanıcı verilerini döndürür"""
     today = str(date.today())
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
@@ -28,12 +26,10 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     user_data = user_doc.to_dict()
     plan = user_data.get("plan", "free")
 
-    # Günlük kullanımı sıfırla
     if user_data.get("usage", {}).get("date") != today:
         user_data["usage"] = {"count": 0, "date": today}
         user_ref.update({"usage": user_data["usage"]})
     
-    # Limiti kontrol et
     limit = PLAN_LIMITS.get(plan, 0)
     if user_data.get("usage", {}).get("count", 0) >= limit:
         plan_name = plan.capitalize()
@@ -46,7 +42,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
 
 
 def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
-    """Plana göre dinamik olarak OpenAI için prompt oluşturur."""
+    """Plana göre dinamik olarak prompt oluşturur."""
     
     wardrobe_items = [f"{item.id}|{item.name}|{item.category}|{item.color}" for item in request.wardrobe]
     wardrobe_str = "\n".join(wardrobe_items)
@@ -60,15 +56,18 @@ def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
         if recent_items:
             recent_items_info = f"RECENTLY USED: {', '.join(recent_items)} - Try to suggest different items for variety."
 
+    # --- YENİ MANTIK: PINTEREST PROMPT'UNU PLANA GÖRE EKLE ---
     pinterest_json_format = ""
+    # Eğer plan 'premium' ise, JSON formatına pinterest_links'i ekle
     if request.plan == 'premium':
-        pinterest_json_format = f""",
+        pinterest_json_format = f"""
 "pinterest_links": [
     {{"title": "Specific color + gender combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=selected+colors+{gender}+kombin+{request.language}"}},
     {{"title": "Gender + occasion specific styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+occasion+outfit+{request.language}"}},
     {{"title": "Gender + weather appropriate outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+weather+kıyafet+{request.language}"}}
 ]
 """
+    # --- MANTIK BİTİŞİ ---
 
     prompt = f"""Fashion stylist for {gender} user. Respond ONLY in {request.language}.
 
@@ -90,12 +89,13 @@ JSON FORMAT:
 {{
 "items": [{{"id": "exact_id", "name": "exact_name", "category": "exact_category"}}],
 "description": "Detailed outfit description in {request.language} with translated colors",
-"suggestion_tip": "Styling advice in {request.language} for the occasion"{pinterest_json_format}
+"suggestion_tip": "Styling advice in {request.language} for the occasion"
+{',' if pinterest_json_format else ''} {pinterest_json_format}
 }}
 
 PINTEREST EXAMPLES:
 ✓ "Mavi ve Beyaz Erkek Kombin Önerileri"
-✓ "Erkek Şehir Turu Kıyafet Fikirleri"
+✓ "Erkek Şehir Turu Kıyafet Fikirleri"  
 ✓ "Sıcak Hava Erkek Casual Kombinler"
 ✗ "Renk kombinasyonları" (too generic)
 ✗ "Günlük stil önerileri" (no gender, too vague)"""
@@ -104,9 +104,10 @@ PINTEREST EXAMPLES:
 
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
-    """Outfit (kıyafet) önerisi oluşturur."""
+    """Outfit önerisi oluşturur - client'ten gelen plan ve gender bilgisini kullanır"""
     user_id = user_info["user_id"]
     
+    # Client'tan gelen gender bilgisini kullan, yoksa veritabanından al
     gender = request.gender if request.gender in ['male', 'female'] else user_info.get("gender", "unisex")
     
     prompt = create_outfit_prompt(request, gender)
@@ -120,7 +121,9 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
             ],
             response_format={"type": "json_object"},
             temperature=0.8,
-            max_tokens=800
+            max_tokens=800,
+            top_p=0.9,
+            seed=None
         )
         
         response_content = completion.choices[0].message.content
@@ -131,17 +134,20 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
             outfit_response = json.loads(response_content)
             
             if not outfit_response.get("items"):
-                raise HTTPException(status_code=500, detail="No items returned by AI.")
+                raise HTTPException(status_code=500, detail="No items returned.")
             
+            # Daha sağlam bir footwear kontrolü
             categories = {item.get("category", "").lower() for item in outfit_response.get("items", [])}
+            # Ayakkabı alt kategorilerini genişletelim
             footwear_subcategories = {"sneakers", "heels", "boots", "sandals", "flats", "loafers", "wedges", "classic-shoes", "boat-shoes"}
+
             if not any(cat in footwear_subcategories for cat in categories):
-                raise HTTPException(status_code=500, detail="AI did not include any footwear in the outfit.")
+                raise HTTPException(status_code=500, detail="No footwear included.")
                 
         except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail="AI returned invalid JSON.")
+            raise HTTPException(status_code=500, detail="Invalid JSON.")
         
-        # Kullanımı artır
+        # Usage'ı artır
         db.collection('users').document(user_id).update({
             'usage.count': firestore.Increment(1),
             'usage.date': str(date.today())
