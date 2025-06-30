@@ -81,17 +81,20 @@ async def apple_auth(request: AppleAuthRequest):
         # Apple identity token'ı doğrula
         apple_user_info = await verify_apple_token(request.identity_token)
         
-        if not apple_user_info:
+        # 💡 YENİ VE DAHA GÜVENLİ KONTROL
+        # apple_user_info'nun None olmadığını VE bir sözlük olduğunu kontrol et
+        if not apple_user_info or not isinstance(apple_user_info, dict):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Apple identity token"
+                detail="Invalid Apple identity token or token could not be decoded"
             )
         
         # Apple'dan gelen kullanıcı bilgilerini birleştir
-        if request.user_info and request.user_info.get('name'):
+        if request.user_info and isinstance(request.user_info, dict) and request.user_info.get('name'):
             full_name = f"{request.user_info['name'].get('givenName', '')} {request.user_info['name'].get('familyName', '')}".strip()
         else:
-            full_name = apple_user_info.get('email', '').split('@')[0] if apple_user_info.get('email') else f"User_{apple_user_info['sub'][:8]}"
+            # .get() metodu artık burada güvenle kullanılabilir
+            full_name = apple_user_info.get('email', '').split('@')[0] if apple_user_info.get('email') else f"User_{apple_user_info.get('sub', '')[:8]}"
         
         # Kullanıcı ID'sini Apple ID'den oluştur
         user_id = f"apple_{apple_user_info['sub']}"
@@ -118,6 +121,9 @@ async def apple_auth(request: AppleAuthRequest):
         }
         
     except Exception as e:
+        # Hata ayıklama için loglamayı iyileştirebilirsiniz
+        # import logging
+        # logging.error(f"Apple auth error: {e}, Type of apple_user_info: {type(apple_user_info)}")
         print(f"Apple auth error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
