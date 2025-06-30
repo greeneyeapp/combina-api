@@ -77,7 +77,6 @@ async def google_auth(request: GoogleAuthRequest):
 @router.post("/auth/apple")
 async def apple_auth(request: AppleAuthRequest):
     """Apple Sign-In ile direkt backend'e giriş"""
-    print("APPLE LOG: ", request)
     try:
         # Apple identity token'ı doğrula
         apple_user_info = await verify_apple_token(request.identity_token)
