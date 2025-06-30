@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import BaseModel
 import hashlib
 import secrets
-
+import json 
 from core.security import create_access_token, get_current_user_id
 from core.config import settings
 
@@ -73,33 +73,61 @@ async def google_auth(request: GoogleAuthRequest):
             detail="Google authentication failed"
         )
 
-# Apple Sign-In endpoint
 @router.post("/auth/apple")
 async def apple_auth(request: AppleAuthRequest):
     """Apple Sign-In ile direkt backend'e giriş"""
+
+    # --- YENİ LOGLAMA KISMI ---
+    print("\n" + "="*50)
+    print(">>> YENİ BİR APPLE SIGN-IN İSTEĞİ GELDİ <<<")
+    try:
+        # Gelen tüm isteği (request) güzel formatta yazdır
+        print("--- Gelen Request Body (Tümü) ---")
+        print(json.dumps(request.dict(), indent=2))
+
+        # Özellikle user_info ve içindeki name'in tipini kontrol et
+        if request.user_info:
+            print(f"\n--- request.user_info içeriği ---")
+            print(request.user_info)
+            if 'name' in request.user_info:
+                 print(f"--> request.user_info['name'] verisinin TİPİ: {type(request.user_info['name'])}")
+                 print(f"--> request.user_info['name'] verisinin DEĞERİ: {request.user_info['name']}")
+
+    except Exception as log_e:
+        print(f"[LOGLAMA SIRASINDA HATA]: {log_e}")
+    print("="*50 + "\n")
+    # --- LOGLAMA KISMI BİTTİ ---
+
     try:
         # Apple identity token'ı doğrula
         apple_user_info = await verify_apple_token(request.identity_token)
         
-        # 💡 YENİ VE DAHA GÜVENLİ KONTROL
-        # apple_user_info'nun None olmadığını VE bir sözlük olduğunu kontrol et
         if not apple_user_info or not isinstance(apple_user_info, dict):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Apple identity token or token could not be decoded"
             )
         
-        # Apple'dan gelen kullanıcı bilgilerini birleştir
-        if request.user_info and isinstance(request.user_info, dict) and request.user_info.get('name'):
-            full_name = f"{request.user_info['name'].get('givenName', '')} {request.user_info['name'].get('familyName', '')}".strip()
-        else:
-            # .get() metodu artık burada güvenle kullanılabilir
-            full_name = apple_user_info.get('email', '').split('@')[0] if apple_user_info.get('email') else f"User_{apple_user_info.get('sub', '')[:8]}"
+        # --- ÖNCEKİ YANITTAKİ GÜVENLİ İSİM BİRLEŞTİRME MANTIĞI ---
+        full_name = ""
         
-        # Kullanıcı ID'sini Apple ID'den oluştur
+        if request.user_info and isinstance(request.user_info.get('name'), dict):
+            name_data = request.user_info['name']
+            full_name = f"{name_data.get('givenName', '')} {name_data.get('familyName', '')}".strip()
+        elif request.user_info and isinstance(request.user_info.get('name'), str):
+             # Eğer 'name' alanı bir string ise, doğrudan onu kullan
+             full_name = request.user_info['name']
+
+        if not full_name:
+            if apple_user_info.get('email'):
+                full_name = apple_user_info.get('email').split('@')[0]
+            else:
+                apple_sub = apple_user_info.get('sub', secrets.token_hex(4))
+                full_name = f"User_{apple_sub[:8]}"
+        
+        # ... (fonksiyonun geri kalanı aynı)
         user_id = f"apple_{apple_user_info['sub']}"
         
-        # Kullanıcıyı Firestore'da oluştur/güncelle
         user_info = await create_or_update_user(
             uid=user_id,
             email=apple_user_info.get('email', ''),
@@ -108,7 +136,6 @@ async def apple_auth(request: AppleAuthRequest):
             provider_id=apple_user_info['sub']
         )
         
-        # Backend JWT token oluştur
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": user_id}, expires_delta=access_token_expires
@@ -121,13 +148,15 @@ async def apple_auth(request: AppleAuthRequest):
         }
         
     except Exception as e:
-        # Hata ayıklama için loglamayı iyileştirebilirsiniz
-        # import logging
-        # logging.error(f"Apple auth error: {e}, Type of apple_user_info: {type(apple_user_info)}")
-        print(f"Apple auth error: {e}")
+        import traceback
+        print(f"--- APPLE AUTH İŞLEME HATASI ---")
+        print(f"Error: {e}")
+        traceback.print_exc()
+        print(f"--- HATA SONU ---")
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Apple authentication failed"
+            detail="Apple authentication failed due to an internal error."
         )
 
 # Kullanıcı bilgi güncelleme endpoint'i
