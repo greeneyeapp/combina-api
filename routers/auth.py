@@ -1,18 +1,18 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import timedelta, datetime
-from firebase_admin import firestore
 import requests
 import jwt
 from typing import Optional
 from pydantic import BaseModel
-import hashlib
-import secrets
 
 from core.security import create_access_token, get_current_user_id
 from core.config import settings
 
+from firebase_setup import db, firestore
+
 router = APIRouter()
-db = firestore.client()
+
 
 # OAuth modelleri
 class GoogleAuthRequest(BaseModel):
@@ -29,11 +29,10 @@ class UserInfoUpdate(BaseModel):
     birthDate: str
 
 # Google OAuth endpoint
-@router.post("/auth/google")
+@router.post("/google")
 async def google_auth(request: GoogleAuthRequest):
     """Google OAuth ile direkt backend'e giriş"""
     try:
-        # Google API'den kullanıcı bilgilerini al
         google_user_info = await get_google_user_info(request.access_token)
         
         if not google_user_info:
@@ -42,10 +41,8 @@ async def google_auth(request: GoogleAuthRequest):
                 detail="Invalid Google access token"
             )
         
-        # Kullanıcı ID'sini Google ID'den oluştur
         user_id = f"google_{google_user_info['id']}"
         
-        # Kullanıcıyı Firestore'da oluştur/güncelle
         user_info = await create_or_update_user(
             uid=user_id,
             email=google_user_info['email'],
@@ -54,7 +51,6 @@ async def google_auth(request: GoogleAuthRequest):
             provider_id=google_user_info['id']
         )
         
-        # Backend JWT token oluştur
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": user_id}, expires_delta=access_token_expires
@@ -74,11 +70,10 @@ async def google_auth(request: GoogleAuthRequest):
         )
 
 # Apple Sign-In endpoint
-@router.post("/auth/apple")
+@router.post("/apple")
 async def apple_auth(request: AppleAuthRequest):
     """Apple Sign-In ile direkt backend'e giriş"""
     try:
-        # Apple identity token'ı doğrula
         apple_user_info = await verify_apple_token(request.identity_token)
         
         if not apple_user_info:
@@ -87,16 +82,13 @@ async def apple_auth(request: AppleAuthRequest):
                 detail="Invalid Apple identity token"
             )
         
-        # Apple'dan gelen kullanıcı bilgilerini birleştir
         if request.user_info and request.user_info.get('name'):
             full_name = f"{request.user_info['name'].get('givenName', '')} {request.user_info['name'].get('familyName', '')}".strip()
         else:
             full_name = apple_user_info.get('email', '').split('@')[0] if apple_user_info.get('email') else f"User_{apple_user_info['sub'][:8]}"
         
-        # Kullanıcı ID'sini Apple ID'den oluştur
         user_id = f"apple_{apple_user_info['sub']}"
         
-        # Kullanıcıyı Firestore'da oluştur/güncelle
         user_info = await create_or_update_user(
             uid=user_id,
             email=apple_user_info.get('email', ''),
@@ -105,7 +97,6 @@ async def apple_auth(request: AppleAuthRequest):
             provider_id=apple_user_info['sub']
         )
         
-        # Backend JWT token oluştur
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": user_id}, expires_delta=access_token_expires
@@ -125,12 +116,14 @@ async def apple_auth(request: AppleAuthRequest):
         )
 
 # Kullanıcı bilgi güncelleme endpoint'i
-@router.post("/api/users/update-info")
+# NOT: Bu endpoint'in yolu main.py'daki prefix ile birleşeceği için
+# /api/v1/auth/update-info şeklinde olacak.
+@router.post("/update-info")
 async def update_user_info(
     request: UserInfoUpdate,
     user_id: str = Depends(get_current_user_id)
 ):
-    """Kullanıcı bilgilerini güncelle"""
+    """Kullanıcı bilgilerini (isim, cinsiyet, doğum tarihi) günceller."""
     try:
         user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get()
@@ -141,7 +134,6 @@ async def update_user_info(
                 detail="User not found"
             )
         
-        # Bilgileri güncelle
         update_data = {
             "fullname": request.name,
             "gender": request.gender,
@@ -149,7 +141,6 @@ async def update_user_info(
             "updatedAt": firestore.SERVER_TIMESTAMP
         }
         
-        # Yaş hesapla
         try:
             birth_date = datetime.fromisoformat(request.birthDate.replace('Z', '+00:00'))
             today = datetime.now()
@@ -186,14 +177,11 @@ async def get_google_user_info(access_token: str):
 async def verify_apple_token(identity_token: str):
     """Apple identity token'ı doğrula"""
     try:
-        # Apple'ın public keylerini al
         apple_keys_response = requests.get("https://appleid.apple.com/auth/keys")
         apple_keys = apple_keys_response.json()
         
-        # Token'ı decode et
         header = jwt.get_unverified_header(identity_token)
         
-        # Uygun key'i bul ve token'ı doğrula
         for key in apple_keys['keys']:
             if key['kid'] == header['kid']:
                 try:
@@ -221,7 +209,6 @@ async def create_or_update_user(uid: str, email: str, name: str, provider: str, 
         user_doc = user_ref.get()
         
         if not user_doc.exists:
-            # Yeni kullanıcı oluştur
             user_data = {
                 "email": email,
                 "fullname": name,
@@ -233,7 +220,6 @@ async def create_or_update_user(uid: str, email: str, name: str, provider: str, 
             }
             user_ref.set(user_data)
         else:
-            # Mevcut kullanıcıyı güncelle
             user_data = user_doc.to_dict()
             update_data = {
                 "email": email,
@@ -242,14 +228,12 @@ async def create_or_update_user(uid: str, email: str, name: str, provider: str, 
                 "updatedAt": firestore.SERVER_TIMESTAMP
             }
             
-            # Sadece boşsa güncelle
             if not user_data.get("fullname"):
                 update_data["fullname"] = name
                 
             user_ref.update(update_data)
             user_data.update(update_data)
         
-        # Güncel user data'yı al
         updated_doc = user_ref.get()
         updated_data = updated_doc.to_dict()
         

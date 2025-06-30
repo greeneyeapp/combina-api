@@ -1,9 +1,12 @@
 # routers/users.py
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
-from services.firebase import db, auth
 from firebase_admin import firestore
 import logging
+
+# Hatalı olan 'services' importu yerine, projenin ana dizinindeki
+# 'firebase_setup.py' dosyasından db ve auth objelerini alıyoruz.
+from firebase_setup import db, auth
 
 router = APIRouter()
 
@@ -21,6 +24,7 @@ def get_current_user(request: Request):
     
     id_token = auth_header.split("Bearer ")[1]
     try:
+        # 'auth' objesi artık firebase_setup.py'dan geliyor
         decoded_token = auth.verify_id_token(id_token)
         return decoded_token
     except Exception as e:
@@ -33,7 +37,7 @@ def determine_plan_from_entitlements(entitlements: dict) -> str:
     'premium' yetkisi aktifse 'premium', değilse 'free' döner.
     """
     # 'premium' yetkisinin olup olmadığını ve aktif olup olmadığını kontrol et
-    if "premium" in entitlements and entitlements["premium"]["expires_date"] is None:
+    if "premium" in entitlements and entitlements["premium"].get("expires_date") is None:
         return "premium"
     return "free"
 
@@ -61,8 +65,6 @@ async def handle_revenuecat_webhook(request: Request):
         user_doc = user_ref.get()
         if not user_doc.exists:
             logger.warning(f"Webhook için kullanıcı bulunamadı: {app_user_id}")
-            # Opsiyonel: Eğer kullanıcı yoksa oluşturabilirsiniz.
-            # Şimdilik sadece uyarı verip geçiyoruz.
             return {"status": "success", "message": f"User {app_user_id} not found"}
 
         user_data = user_doc.to_dict()
@@ -71,15 +73,12 @@ async def handle_revenuecat_webhook(request: Request):
         entitlements = event_data.get("entitlements", {})
         new_plan = determine_plan_from_entitlements(entitlements)
 
-        # Eğer plan değişmemişse işlem yapmaya gerek yok
         if previous_plan == new_plan:
             logger.info(f"Plan değişmedi, işlem atlandı. Kullanıcı: {app_user_id}, Plan: {new_plan}")
             return {"status": "success", "message": "Plan is already up to date"}
 
-        # Atomik işlem için batch oluştur
         batch = db.batch()
 
-        # 1. plan_history koleksiyonuna geçmiş kaydını ekle
         history_ref = db.collection('plan_history').document()
         batch.set(history_ref, {
             "userId": app_user_id,
@@ -87,17 +86,15 @@ async def handle_revenuecat_webhook(request: Request):
             "newPlan": new_plan,
             "changeTimestamp": firestore.SERVER_TIMESTAMP,
             "changeSource": f"webhook_{event_data.get('type', 'unknown')}",
-            "eventDetails": event_data # Tüm event verisini saklamak faydalı olabilir
+            "eventDetails": event_data
         })
 
-        # 2. Ana kullanıcı dökümanını güncelle
         batch.update(user_ref, {
             "plan": new_plan,
             "planUpdatedAt": firestore.SERVER_TIMESTAMP,
             "subscriptionStatus": "active" if new_plan == "premium" else "inactive"
         })
 
-        # Batch'i onayla
         batch.commit()
         
         logger.info(f"Plan başarıyla güncellendi ve loglandı (Webhook). Kullanıcı: {app_user_id}, {previous_plan} -> {new_plan}")
@@ -134,10 +131,8 @@ def update_user_plan(
         if previous_plan == new_plan:
              return {"message": "Plan zaten güncel", "current_plan": new_plan}
 
-        # Atomik işlem için batch oluştur
         batch = db.batch()
 
-        # 1. plan_history koleksiyonuna geçmiş kaydını ekle
         history_ref = db.collection('plan_history').document()
         batch.set(history_ref, {
             "userId": user_id,
@@ -147,13 +142,11 @@ def update_user_plan(
             "changeSource": "manual_update"
         })
 
-        # 2. Ana kullanıcı dökümanını güncelle
         batch.update(user_ref, {
             "plan": new_plan,
             "planUpdatedAt": firestore.SERVER_TIMESTAMP
         })
         
-        # Batch'i onayla
         batch.commit()
         
         logger.info(f"Plan başarıyla güncellendi ve loglandı (Manuel). Kullanıcı: {user_id}, {previous_plan} -> {new_plan}")
@@ -186,10 +179,8 @@ def verify_purchase(
         if previous_plan == new_plan:
             return {"status": "success", "plan": new_plan, "message": "Plan zaten güncel."}
 
-        # Atomik işlem için batch oluştur
         batch = db.batch()
 
-        # 1. plan_history koleksiyonuna geçmiş kaydını ekle
         history_ref = db.collection('plan_history').document()
         batch.set(history_ref, {
             "userId": user_id,
@@ -199,13 +190,11 @@ def verify_purchase(
             "changeSource": "client_verification"
         })
 
-        # 2. Ana kullanıcı dökümanını güncelle
         batch.update(user_ref, {
             "plan": new_plan,
             "planUpdatedAt": firestore.SERVER_TIMESTAMP
         })
         
-        # Batch'i onayla
         batch.commit()
         
         logger.info(f"Plan başarıyla güncellendi ve loglandı (Client). Kullanıcı: {user_id}, {previous_plan} -> {new_plan}")
