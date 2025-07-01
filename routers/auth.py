@@ -268,6 +268,7 @@ async def create_or_update_user(uid: str, email: str, name: str, provider: str, 
             "uid": uid,
             "email": updated_data.get("email"),
             "name": updated_data.get("fullname"),
+            "fullname": updated_data.get("fullname"),  # ← Bu satır eklendi
             "gender": updated_data.get("gender"),
             "birthDate": updated_data.get("birthDate"),
             "plan": updated_data.get("plan", "free"),
