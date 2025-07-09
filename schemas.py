@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Union
 from datetime import datetime
 
@@ -27,13 +27,30 @@ class ClothingItem(BaseModel):
     id: str
     name: str
     category: str
-    subcategory: Optional[str] = None      
-    color: str
-    colors: Optional[List[str]] = None  # ← BU SATIRI EKLEYİN
+    subcategory: Optional[str] = None
+    
+    # ÇOK ÖNEMLİ: Hem eski hem yeni format desteği
+    color: Optional[str] = None  # Backward compatibility için
+    colors: Optional[List[str]] = None  # Yeni çoklu renk desteği
+    
     season: List[str]
-    style: Union[str, List[str]]  # ← BU SATIRI DEĞİŞTİRİN (önceden sadece str idi)
+    style: Union[str, List[str]]  # String veya array desteği
     notes: Optional[str] = None
-    createdAt: Optional[str] = None        
+    createdAt: Optional[str] = None
+    
+    @validator('colors', pre=True, always=True)
+    def ensure_colors_from_color(cls, v, values):
+        """color field'ından colors array'ini oluştur"""
+        if v is None and 'color' in values and values['color']:
+            return [values['color']]
+        return v
+    
+    @validator('color', pre=True, always=True)
+    def ensure_color_from_colors(cls, v, values):
+        """colors array'inden color field'ını oluştur"""
+        if v is None and 'colors' in values and values['colors'] and len(values['colors']) > 0:
+            return values['colors'][0]
+        return v
 
     class Config:
         allow_population_by_field_name = True
@@ -45,9 +62,9 @@ class ClothingItem(BaseModel):
 class Outfit(BaseModel):
     items: List[str]
     occasion: str
-    weather: Optional[str] = None  # ← BU SATIRI EKLEYİN
+    weather: Optional[str] = None
     date: str
-
+    
     class Config:
         allow_population_by_field_name = True
 
@@ -56,10 +73,10 @@ class RequestContext(BaseModel):
     total_wardrobe_size: Optional[int] = None
     filtered_wardrobe_size: Optional[int] = None
     user_plan: Optional[str] = None
-
+    
     class Config:
         allow_population_by_field_name = True
-        
+
 class PinterestLink(BaseModel):
     title: str
     url: str
@@ -67,26 +84,24 @@ class PinterestLink(BaseModel):
 class OutfitRequest(BaseModel):
     language: str = Field(..., alias='language')
     gender: Optional[str] = Field(None, alias='gender')
-    plan: str = Field(..., alias='plan') 
+    plan: str = Field(..., alias='plan')
+    
     wardrobe: List[ClothingItem] = Field(..., alias='wardrobe')
     last_5_outfits: List[Outfit] = Field(..., alias='last_5_outfits')
     weather_condition: str = Field(..., alias='weather_condition')
     occasion: str = Field(..., alias='occasion')
-    context: Optional[RequestContext] = Field(None, alias='context')  # ← BU SATIRI EKLEYİN
+    context: Optional[RequestContext] = Field(None, alias='context')
     
     class Config:
         allow_population_by_field_name = True
-        alias_generator = lambda s: ''.join(
-            part.capitalize() if i else part for i, part in enumerate(s.split('_'))
-        )
         allow_population_by_alias = True
 
 class SuggestedItem(BaseModel):
     id: str
     name: str
     category: str
-    subcategory: Optional[str] = None    
-
+    subcategory: Optional[str] = None
+    
     class Config:
         allow_population_by_field_name = True
 
@@ -95,7 +110,7 @@ class OutfitResponse(BaseModel):
     description: str
     suggestion_tip: Optional[str] = None
     pinterest_links: Optional[List[PinterestLink]] = None
-
+    
     class Config:
         allow_population_by_field_name = True
 
@@ -103,7 +118,7 @@ class ProfileInit(BaseModel):
     gender: str
     fullname: str
     birthDate: Optional[str] = None
-
+    
     class Config:
         allow_population_by_field_name = True
 
@@ -127,7 +142,7 @@ class PlanUpdateRequest(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
-# YENİ: Satın alma doğrulama için schema  
+# YENİ: Satın alma doğrulama için schema
 class PurchaseVerification(BaseModel):
     customer_info: dict
     
