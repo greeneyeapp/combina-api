@@ -59,10 +59,21 @@ def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
     # Yeni optimized format - colors array ve style array destekli
     wardrobe_items = []
     for item in request.wardrobe:
-        # Çoklu renk desteği
-        colors_str = ",".join(item.colors) if hasattr(item, 'colors') and item.colors else item.color
-        # Çoklu stil desteği  
-        styles_str = ",".join(item.style) if hasattr(item, 'style') and isinstance(item.style, list) else getattr(item, 'style', 'casual')
+        # Çoklu renk desteği - colors varsa onu kullan, yoksa color'dan oluştur
+        if hasattr(item, 'colors') and item.colors:
+            colors_str = ",".join(item.colors)
+        else:
+            colors_str = item.color
+            
+        # Çoklu stil desteği - style array veya string olabilir
+        if hasattr(item, 'style'):
+            if isinstance(item.style, list):
+                styles_str = ",".join(item.style)
+            else:
+                styles_str = item.style
+        else:
+            styles_str = 'casual'
+            
         # Mevsim desteği
         seasons_str = ",".join(item.season) if hasattr(item, 'season') and item.season else 'all'
         
@@ -83,7 +94,7 @@ def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
 
     # Context bilgileri - yeni format ile
     context_info = ""
-    if hasattr(request, 'context'):
+    if hasattr(request, 'context') and request.context:
         total_wardrobe = getattr(request.context, 'total_wardrobe_size', len(request.wardrobe))
         filtered_wardrobe = getattr(request.context, 'filtered_wardrobe_size', len(request.wardrobe))
         context_info = f"WARDROBE INFO: Total items: {total_wardrobe}, Filtered for relevance: {filtered_wardrobe}"
@@ -91,12 +102,12 @@ def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
     # Premium plan için Pinterest links
     pinterest_json_format = ""
     if request.plan == 'premium':
-        pinterest_json_format = f"""
+        pinterest_json_format = f'''
 "pinterest_links": [
     {{"title": "Specific color + gender combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=selected+colors+{gender}+kombin+{request.language}"}},
     {{"title": "Gender + occasion specific styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+occasion+outfit+{request.language}"}},
     {{"title": "Gender + weather appropriate outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+weather+kıyafet+{request.language}"}}
-]"""
+]'''
 
     prompt = f"""Fashion stylist for {gender} user. Respond ONLY in {request.language}.
 
@@ -188,6 +199,16 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
             
             if not outfit_response.get("items"):
                 raise HTTPException(status_code=500, detail="No items returned by AI.")
+            
+            # Validasyon: Footwear kontrolü
+            categories = {item.get("category", "").lower() for item in outfit_response.get("items", [])}
+            footwear_subcategories = {
+                "sneakers", "heels", "boots", "sandals", "flats", "loafers", 
+                "wedges", "classic-shoes", "boat-shoes"
+            }
+
+            if not any(cat in footwear_subcategories for cat in categories):
+                raise HTTPException(status_code=500, detail="No footwear included in outfit suggestion.")
             
             # Validasyon: Item ID'lerin wardrobe'da olup olmadığı
             suggested_ids = {item.get("id") for item in outfit_response.get("items", [])}
