@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 
 class Token(BaseModel):
@@ -29,8 +29,9 @@ class ClothingItem(BaseModel):
     category: str
     subcategory: Optional[str] = None      
     color: str
+    colors: Optional[List[str]] = None  # YENİ: Çoklu renk desteği
     season: List[str]
-    style: str
+    style: Union[str, List[str]]  # String veya List kabul et
     notes: Optional[str] = None
     createdAt: Optional[str] = None        
 
@@ -44,7 +45,17 @@ class ClothingItem(BaseModel):
 class Outfit(BaseModel):
     items: List[str]
     occasion: str
+    weather: Optional[str] = None  # YENİ: Weather bilgisi eklendi
     date: str
+
+    class Config:
+        allow_population_by_field_name = True
+
+class RequestContext(BaseModel):
+    """Optimize edilmiş veri hakkında context bilgileri"""
+    total_wardrobe_size: Optional[int] = None
+    filtered_wardrobe_size: Optional[int] = None
+    user_plan: Optional[str] = None
 
     class Config:
         allow_population_by_field_name = True
@@ -61,6 +72,7 @@ class OutfitRequest(BaseModel):
     last_5_outfits: List[Outfit] = Field(..., alias='last_5_outfits')
     weather_condition: str = Field(..., alias='weather_condition')
     occasion: str = Field(..., alias='occasion')
+    context: Optional[RequestContext] = Field(None, alias='context')  # YENİ: Context bilgileri
     
     class Config:
         allow_population_by_field_name = True
@@ -92,5 +104,32 @@ class ProfileInit(BaseModel):
     fullname: str
     birthDate: Optional[str] = None
 
+    class Config:
+        allow_population_by_field_name = True
+
+# YENİ: Usage status için schema
+class UsageStatusResponse(BaseModel):
+    plan: str
+    current_usage: int
+    daily_limit: Union[int, str]  # "unlimited" veya sayı
+    remaining: Union[int, str]    # "unlimited" veya sayı
+    is_unlimited: bool
+    date: str
+    percentage_used: Optional[float] = None  # Free plan için yüzde
+    
+    class Config:
+        allow_population_by_field_name = True
+
+# YENİ: Plan güncelleme için schema
+class PlanUpdateRequest(BaseModel):
+    plan: str = Field(..., description="New plan (free, premium)")
+    
+    class Config:
+        allow_population_by_field_name = True
+
+# YENİ: Satın alma doğrulama için schema  
+class PurchaseVerification(BaseModel):
+    customer_info: dict
+    
     class Config:
         allow_population_by_field_name = True
