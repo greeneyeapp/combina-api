@@ -29,9 +29,9 @@ class ClothingItem(BaseModel):
     category: str
     subcategory: Optional[str] = None      
     color: str
-    colors: Optional[List[str]] = None  # YENİ: Çoklu renk desteği
+    colors: Optional[List[str]] = None  # ← BU SATIRI EKLEYİN
     season: List[str]
-    style: Union[str, List[str]]  # String veya List kabul et
+    style: Union[str, List[str]]  # ← BU SATIRI DEĞİŞTİRİN (önceden sadece str idi)
     notes: Optional[str] = None
     createdAt: Optional[str] = None        
 
@@ -45,7 +45,7 @@ class ClothingItem(BaseModel):
 class Outfit(BaseModel):
     items: List[str]
     occasion: str
-    weather: Optional[str] = None  # YENİ: Weather bilgisi eklendi
+    weather: Optional[str] = None  # ← BU SATIRI EKLEYİN
     date: str
 
     class Config:
@@ -72,7 +72,7 @@ class OutfitRequest(BaseModel):
     last_5_outfits: List[Outfit] = Field(..., alias='last_5_outfits')
     weather_condition: str = Field(..., alias='weather_condition')
     occasion: str = Field(..., alias='occasion')
-    context: Optional[RequestContext] = Field(None, alias='context')  # YENİ: Context bilgileri
+    context: Optional[RequestContext] = Field(None, alias='context')  # ← BU SATIRI EKLEYİN
     
     class Config:
         allow_population_by_field_name = True
