@@ -313,6 +313,23 @@ Wardrobe: {wardrobe}
 CRITICAL: Use EXACT category names from wardrobe above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
 Required: 1 top + 1 bottom + 1 footwear + optional outerwear/accessories.
 
+Pinterest examples for better links:
+- Color + gender + occasion: "{gender} {request.occasion} blue shirt black pants"
+- Weather + gender + style: "{gender} {request.weather_condition} weather outfit"
+- Specific items + gender: "{gender} white sneakers styling ideas"
+- Create 2-3 specific, searchable Pinterest links
+
+JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_wardrobe"}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"specific_and_useful_title_in_{request.language}","url":"pinterest_search_url"}}]}}"""💎 Creating PREMIUM plan prompt")
+        
+        return f"""Expert {gender} styling: {request.occasion}, {request.weather_condition}.
+Language: {request.language}
+
+Wardrobe: {wardrobe}
+{recent}
+
+CRITICAL: Use EXACT category names from wardrobe above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
+Required: 1 top + 1 bottom + 1 footwear + optional outerwear/accessories.
+
 JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_wardrobe"}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
 
 # Global engine instance
