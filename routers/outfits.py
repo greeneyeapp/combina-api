@@ -67,11 +67,11 @@ class SmartOutfitEngine:
             'date': ['party', 'casual', 'formal']
         }
         
-        # Category mapping - English only (client sends English categories)
+        # Category mapping - AI'ın generic terimleri de destekleyelim
         self.category_types = {
-            'tops': ['t-shirt', 'shirt', 'blouse', 'top', 'bodysuit', 'crop-top', 'tank-top', 'sweater', 'cardigan', 'hoodie', 'turtleneck', 'polo-shirt', 'henley-shirt'],
+            'tops': ['t-shirt', 'shirt', 'blouse', 'top', 'bodysuit', 'crop-top', 'tank-top', 'sweater', 'cardigan', 'hoodie', 'turtleneck', 'polo-shirt', 'henley-shirt', 'tops'],
             'bottoms': ['jeans', 'trousers', 'leggings', 'joggers', 'skirt', 'shorts', 'culottes', 'chino-trousers', 'cargo-pants', 'bottom', 'bottoms'],
-            'dresses': ['dress', 'jumpsuit', 'romper'],
+            'dresses': ['dress', 'jumpsuit', 'romper', 'dresses'],
             'outerwear': ['coat', 'trenchcoat', 'jacket', 'bomber-jacket', 'denim-jacket', 'leather-jacket', 'blazer', 'vest', 'gilet', 'outerwear'],
             'footwear': ['sneakers', 'heels', 'boots', 'sandals', 'flats', 'loafers', 'wedges', 'classic-shoes', 'boat-shoes', 'footwear', 'shoes'],
             'bags': ['handbag', 'crossbody-bag', 'backpack', 'clutch', 'tote-bag', 'fanny-pack', 'messenger-bag', 'briefcase', 'bag', 'bags'],
@@ -295,12 +295,10 @@ Language: {request.language}
 Items: {wardrobe}
 {recent}
 
-RULES:
-- REQUIRED: 1 top + 1 bottom + 1 footwear (3 different items minimum)
-- Use EXACT category from wardrobe (keep English)
-- Translate name/description to {request.language}
+CRITICAL: Use EXACT category names from items above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
+Required: 1 top + 1 bottom + 1 footwear item.
 
-JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":""}}"""
+JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_above"}}],"description":"","suggestion_tip":""}}"""
     
     def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
         """Premium plan enhanced prompt"""
@@ -312,13 +310,10 @@ Language: {request.language}
 Wardrobe: {wardrobe}
 {recent}
 
-RULES:
-- REQUIRED: 1 top + 1 bottom + 1 footwear (3 different items minimum)
-- OPTIONAL: outerwear/accessories for style
-- Use EXACT category from wardrobe (keep English)
-- Color harmony + fashion insights
+CRITICAL: Use EXACT category names from wardrobe above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
+Required: 1 top + 1 bottom + 1 footwear + optional outerwear/accessories.
 
-JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
+JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_wardrobe"}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
 
 # Global engine instance
 print("🚀 Initializing SmartOutfitEngine...")
