@@ -121,16 +121,16 @@ class SmartOutfitEngine:
     
     def create_compact_wardrobe(self, wardrobe: List[ClothingItem]) -> str:
         """Ultra compact wardrobe representation - flexible categories"""
-        groups = self.group_by_category_type(wardrobe)  # Doğru metod ismi
+        groups = self.group_by_category_type(wardrobe)  # ← BU SATIR
         compact_parts = []
         
-        for category_type, items in groups.items():
+        for category_type, items in groups.items():  # ← BU SATIR
             item_strings = []
             for item in items:
                 colors = item.colors[0] if item.colors else item.color or "neutral"
                 item_strings.append(f"{item.id}:{item.name}({colors})")
             
-            compact_parts.append(f"{category_type}[{','.join(item_strings)}]")
+            compact_parts.append(f"{category_type}[{','.join(item_strings)}]")  # ← BU SATIR
         
         return " | ".join(compact_parts)
     
