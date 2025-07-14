@@ -266,6 +266,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
 
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
+    
     """Yeni nesil kombin önerisi"""
     user_id = user_info["user_id"]
     plan = user_info["plan"]
@@ -281,6 +282,15 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
     prompt = outfit_engine.create_prompt(request, gender)
     
     try:
+        
+        print(f"🔍 Debug - Request received: {request.occasion}, {request.weather_condition}")
+        print(f"🔍 Debug - Wardrobe size: {len(request.wardrobe)}")
+        print(f"🔍 Debug - Gender: {gender}, Plan: {plan}")
+        
+        # Create optimized prompt
+        prompt = outfit_engine.create_prompt(request, gender)
+        print(f"🔍 Debug - Prompt created successfully")
+        
         # Plan-based AI configuration
         ai_config = {
             "free": {"max_tokens": 500, "temperature": 0.7},
