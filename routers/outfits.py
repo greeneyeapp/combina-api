@@ -67,15 +67,15 @@ class SmartOutfitEngine:
             'date': ['party', 'casual', 'formal']
         }
         
-        # Category mapping - flexible
+        # Category mapping - flexible (AI de bu generic terimleri kullanabilir)
         self.category_types = {
             'tops': ['t-shirt', 'shirt', 'blouse', 'top', 'bodysuit', 'crop-top', 'tank-top', 'sweater', 'cardigan', 'hoodie', 'turtleneck', 'polo-shirt', 'henley-shirt'],
-            'bottoms': ['jeans', 'trousers', 'leggings', 'joggers', 'skirt', 'shorts', 'culottes', 'chino-trousers', 'cargo-pants'],
+            'bottoms': ['jeans', 'trousers', 'leggings', 'joggers', 'skirt', 'shorts', 'culottes', 'chino-trousers', 'cargo-pants', 'bottom', 'bottoms'],
             'dresses': ['dress', 'jumpsuit', 'romper'],
-            'outerwear': ['coat', 'trenchcoat', 'jacket', 'bomber-jacket', 'denim-jacket', 'leather-jacket', 'blazer', 'vest', 'gilet'],
-            'footwear': ['sneakers', 'heels', 'boots', 'sandals', 'flats', 'loafers', 'wedges', 'classic-shoes', 'boat-shoes'],
-            'bags': ['handbag', 'crossbody-bag', 'backpack', 'clutch', 'tote-bag', 'fanny-pack', 'messenger-bag', 'briefcase'],
-            'accessories': ['jewelry', 'scarf', 'sunglasses', 'belt', 'hat', 'beanie', 'watch', 'tie', 'hijab-shawl']
+            'outerwear': ['coat', 'trenchcoat', 'jacket', 'bomber-jacket', 'denim-jacket', 'leather-jacket', 'blazer', 'vest', 'gilet', 'outerwear'],
+            'footwear': ['sneakers', 'heels', 'boots', 'sandals', 'flats', 'loafers', 'wedges', 'classic-shoes', 'boat-shoes', 'footwear', 'shoes'],
+            'bags': ['handbag', 'crossbody-bag', 'backpack', 'clutch', 'tote-bag', 'fanny-pack', 'messenger-bag', 'briefcase', 'bag', 'bags'],
+            'accessories': ['jewelry', 'scarf', 'sunglasses', 'belt', 'hat', 'beanie', 'watch', 'tie', 'hijab-shawl', 'accessory', 'accessories']
         }
         
         print("✅ SmartOutfitEngine initialized successfully")
@@ -200,7 +200,7 @@ class SmartOutfitEngine:
         return recent
     
     def validate_outfit_structure(self, suggested_items: List[Dict]) -> bool:
-        """Kombin yapısını validate et - flexible"""
+        """Kombin yapısını validate et - basit ve etkili"""
         print(f"🔍 Validating outfit structure for {len(suggested_items)} items")
         
         suggested_categories = [item.get("category", "") for item in suggested_items]
@@ -209,17 +209,24 @@ class SmartOutfitEngine:
         print(f"   📋 Suggested categories: {suggested_categories}")
         print(f"   📋 Category types: {category_types}")
         
-        # En az bir üst, bir alt/elbise ve bir ayakkabı olmalı
+        # Temel kontroller
         has_top_or_dress = any(ct in ['tops', 'dresses'] for ct in category_types)
         has_bottom_or_dress = any(ct in ['bottoms', 'dresses'] for ct in category_types)
         has_footwear = any(ct == 'footwear' for ct in category_types)
+        has_dress = 'dresses' in category_types
         
         print(f"   📊 Structure check:")
         print(f"      - Has top/dress: {has_top_or_dress}")
         print(f"      - Has bottom/dress: {has_bottom_or_dress}")
         print(f"      - Has footwear: {has_footwear}")
+        print(f"      - Has dress: {has_dress}")
         
-        is_valid = has_top_or_dress and (has_bottom_or_dress or 'dresses' in category_types) and has_footwear
+        # Basit validation: 
+        # 1. (Top + Bottom + Footwear) VEYA (Dress + Footwear)
+        is_valid = has_footwear and (
+            (has_top_or_dress and has_bottom_or_dress) or has_dress
+        )
+        
         print(f"   ✅ Structure valid: {is_valid}")
         return is_valid
     
@@ -267,7 +274,7 @@ Language: {request.language}
 Items: {wardrobe}
 {recent}
 
-Select: top/dress + bottom (if not dress) + footwear + optional outerwear
+Select: top + bottom + footwear OR dress + footwear. Optional: outerwear/accessories.
 JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":""}}"""
     
     def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
@@ -279,7 +286,7 @@ Language: {request.language}
 Wardrobe: {wardrobe}
 {recent}
 
-Create stylish outfit with color harmony and fashion insights. Include top/dress, bottom (if not dress), footwear, optional outerwear/accessories.
+Create complete outfit: top + bottom + footwear OR dress + footwear. Add outerwear/accessories for style. Use color harmony and fashion principles.
 JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
 
 # Global engine instance
