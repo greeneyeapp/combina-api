@@ -200,7 +200,7 @@ class SmartOutfitEngine:
         return recent
     
     def validate_outfit_structure(self, suggested_items: List[Dict]) -> bool:
-        """Kombin yapısını validate et - daha esnek erkek kuralları"""
+        """Kombin yapısını validate et - duplicate kategori kontrolü ile"""
         print(f"🔍 Validating outfit structure for {len(suggested_items)} items")
         
         suggested_categories = [item.get("category", "") for item in suggested_items]
@@ -208,6 +208,16 @@ class SmartOutfitEngine:
         
         print(f"   📋 Suggested categories: {suggested_categories}")
         print(f"   📋 Category types: {category_types}")
+        
+        # Duplicate kategorileri kontrol et
+        category_counts = {}
+        for cat_type in category_types:
+            category_counts[cat_type] = category_counts.get(cat_type, 0) + 1
+        
+        duplicates = {k: v for k, v in category_counts.items() if v > 1 and k != 'accessories'}
+        if duplicates:
+            print(f"   ❌ Duplicate categories found: {duplicates}")
+            return False
         
         # Temel kontroller
         has_top_or_dress = any(ct in ['tops', 'dresses'] for ct in category_types)
@@ -220,6 +230,7 @@ class SmartOutfitEngine:
         print(f"      - Has bottom/dress: {has_bottom_or_dress}")
         print(f"      - Has footwear: {has_footwear}")
         print(f"      - Has dress: {has_dress}")
+        print(f"      - Category counts: {category_counts}")
         
         # İdeal validation: (Top + Bottom + Footwear) VEYA (Dress + Footwear)
         ideal_valid = has_footwear and (
@@ -278,46 +289,36 @@ class SmartOutfitEngine:
         """Free plan minimal prompt"""
         print(f"   🔸 Creating FREE plan prompt")
         
-        structure_req = "REQUIRED: top + bottom + footwear. OPTIONAL: outerwear/accessories"
-        if gender == "female":
-            structure_req = "REQUIRED: (top + bottom + footwear) OR (dress + footwear). OPTIONAL: outerwear/accessories"
-            
-        return f"""Create {gender} outfit for {request.occasion} in {request.weather_condition} weather.
-Response language: {request.language}
+        return f"""Create {gender} outfit for {request.occasion}, {request.weather_condition} weather.
+Language: {request.language}
 
-Available items: {wardrobe}
+Items: {wardrobe}
 {recent}
 
-{structure_req}
-- Use EXACT category names from wardrobe (keep English: top, bottom, footwear, outerwear, dress, etc.)
-- Translate only name and description to {request.language}
-- MUST include at least 3 items for complete outfit
+RULES:
+- REQUIRED: 1 top + 1 bottom + 1 footwear (3 different items minimum)
+- Use EXACT category from wardrobe (keep English)
+- Translate name/description to {request.language}
 
-JSON format:
-{{"items":[{{"id":"exact_id","name":"translated_name","category":"english_category"}}],"description":"description_in_{request.language}","suggestion_tip":"tip_in_{request.language}"}}"""
+JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":""}}"""
     
     def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
         """Premium plan enhanced prompt"""
         print(f"   💎 Creating PREMIUM plan prompt")
         
-        structure_req = "REQUIRED: top + bottom + footwear. OPTIONAL: outerwear/accessories"
-        if gender == "female":
-            structure_req = "REQUIRED: (top + bottom + footwear) OR (dress + footwear). OPTIONAL: outerwear/accessories"
-            
-        return f"""Expert {gender} styling for {request.occasion} in {request.weather_condition}.
-Response language: {request.language}
+        return f"""Expert {gender} styling: {request.occasion}, {request.weather_condition}.
+Language: {request.language}
 
 Wardrobe: {wardrobe}
 {recent}
 
-Create complete outfit with color harmony and fashion principles.
-{structure_req}
-- Use EXACT category names from wardrobe (keep English: top, bottom, footwear, outerwear, dress, etc.)
-- Translate only name, description, and tips to {request.language}
-- MUST include at least 3 items for complete outfit
+RULES:
+- REQUIRED: 1 top + 1 bottom + 1 footwear (3 different items minimum)
+- OPTIONAL: outerwear/accessories for style
+- Use EXACT category from wardrobe (keep English)
+- Color harmony + fashion insights
 
-JSON format:
-{{"items":[{{"id":"exact_id","name":"translated_name","category":"english_category"}}],"description":"description_in_{request.language}","suggestion_tip":"tip_in_{request.language}","pinterest_links":[{{"title":"title_in_{request.language}","url":"pinterest_url"}}]}}"""
+JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
 
 # Global engine instance
 print("🚀 Initializing SmartOutfitEngine...")
@@ -383,6 +384,21 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         print(f"   ✅ Language: {request.language}")
         print(f"   ✅ Wardrobe size: {len(request.wardrobe)}")
         print(f"   ✅ Last outfits count: {len(request.last_5_outfits)}")
+        
+        # DETAYLI CLIENT DATA LOGLAMA
+        print(f"📦 Step 2.1: Client wardrobe sample")
+        for i, item in enumerate(request.wardrobe[:3]):  # İlk 3 item
+            print(f"   📝 Item {i+1}: id={item.id}, name='{item.name}', category='{item.category}', colors={item.colors or [item.color]}, style={item.style}")
+        
+        if len(request.wardrobe) > 3:
+            print(f"   📋 ... and {len(request.wardrobe) - 3} more items")
+            
+        print(f"📦 Step 2.2: Client outfit history sample")
+        for i, outfit in enumerate(request.last_5_outfits[:2]):  # İlk 2 outfit
+            print(f"   📝 Outfit {i+1}: items={outfit.items}, occasion='{outfit.occasion}', weather='{outfit.weather}'")
+        
+        if len(request.last_5_outfits) > 2:
+            print(f"   📋 ... and {len(request.last_5_outfits) - 2} more outfits")
         
         # Wardrobe validation
         if not request.wardrobe:
