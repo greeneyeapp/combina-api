@@ -3,7 +3,9 @@ from openai import OpenAI
 import json
 from datetime import date
 from firebase_admin import firestore
-from typing import List, Optional
+from typing import List, Dict, Set
+from collections import defaultdict
+import random
 
 from core.config import settings
 from core.security import get_current_user_id
@@ -13,14 +15,229 @@ router = APIRouter(prefix="/api", tags=["outfits"])
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 db = firestore.client()
 
-# Güncellenmiş plan limitleri - Premium sınırsız
+# Plan limitleri
 PLAN_LIMITS = {
     "free": 2, 
-    "premium": float('inf')  # Sınırsız
+    "premium": float('inf')
 }
 
+class SmartOutfitEngine:
+    """Yeni nesil kombin öneri motoru"""
+    
+    def __init__(self):
+        # Weather-based filtering - keyword bazlı
+        self.weather_keywords = {
+            'hot': {
+                'exclude_keywords': ['coat', 'jacket', 'sweater', 'boot', 'cardigan', 'long', 'warm'],
+                'prefer_keywords': ['short', 'tank', 'sandal', 't-shirt', 'light'],
+                'temp_range': (25, 50)
+            },
+            'warm': {
+                'exclude_keywords': ['coat', 'heavy'],
+                'prefer_keywords': ['t-shirt', 'jean', 'sneaker'],
+                'temp_range': (20, 25)
+            },
+            'mild': {
+                'exclude_keywords': [],
+                'prefer_keywords': ['jean', 'trouser', 'sweater'],
+                'temp_range': (15, 20)
+            },
+            'cool': {
+                'exclude_keywords': ['short', 'tank', 'sandal'],
+                'prefer_keywords': ['jacket', 'jean', 'boot'],
+                'temp_range': (10, 15)
+            },
+            'cold': {
+                'exclude_keywords': ['short', 'tank', 'sandal', 'crop'],
+                'prefer_keywords': ['coat', 'sweater', 'boot', 'jacket', 'warm'],
+                'temp_range': (-10, 10)
+            }
+        }
+        
+        # Occasion-based style mapping
+        self.occasion_styles = {
+            'casual': ['casual', 'sportswear'],
+            'work': ['business', 'formal'],
+            'formal': ['formal', 'business'],
+            'party': ['party', 'formal'],
+            'sport': ['sportswear', 'casual'],
+            'date': ['party', 'casual', 'formal']
+        }
+        
+        # Category mapping - flexible
+        self.category_types = {
+            'tops': ['t-shirt', 'shirt', 'blouse', 'top', 'bodysuit', 'crop-top', 'tank-top', 'sweater', 'cardigan', 'hoodie', 'turtleneck', 'polo-shirt', 'henley-shirt'],
+            'bottoms': ['jeans', 'trousers', 'leggings', 'joggers', 'skirt', 'shorts', 'culottes', 'chino-trousers', 'cargo-pants'],
+            'dresses': ['dress', 'jumpsuit', 'romper'],
+            'outerwear': ['coat', 'trenchcoat', 'jacket', 'bomber-jacket', 'denim-jacket', 'leather-jacket', 'blazer', 'vest', 'gilet'],
+            'footwear': ['sneakers', 'heels', 'boots', 'sandals', 'flats', 'loafers', 'wedges', 'classic-shoes', 'boat-shoes'],
+            'bags': ['handbag', 'crossbody-bag', 'backpack', 'clutch', 'tote-bag', 'fanny-pack', 'messenger-bag', 'briefcase'],
+            'accessories': ['jewelry', 'scarf', 'sunglasses', 'belt', 'hat', 'beanie', 'watch', 'tie', 'hijab-shawl']
+        }
+    
+    def get_category_type(self, category: str) -> str:
+        """Kategoriyi tip grubuna göre sınıflandır"""
+        category_lower = category.lower()
+        for category_type, categories in self.category_types.items():
+            if category_lower in categories:
+                return category_type
+        return 'other'  # Bilinmeyen kategoriler için
+    
+    def filter_wardrobe(self, wardrobe: List[ClothingItem], weather: str, occasion: str) -> List[ClothingItem]:
+        """Context-aware wardrobe filtering - flexible keyword system"""
+        weather_rule = self.weather_keywords.get(weather, self.weather_keywords['mild'])
+        occasion_styles = self.occasion_styles.get(occasion, ['casual'])
+        
+        filtered = []
+        for item in wardrobe:
+            # Weather check - keyword bazlı
+            item_name_lower = item.name.lower()
+            item_category_lower = item.category.lower()
+            
+            # Exclude check
+            should_exclude = any(
+                keyword in item_name_lower or keyword in item_category_lower 
+                for keyword in weather_rule['exclude_keywords']
+            )
+            if should_exclude:
+                continue
+            
+            # Style compatibility check
+            item_styles = item.style if isinstance(item.style, list) else [item.style]
+            if not any(style in occasion_styles for style in item_styles):
+                continue
+            
+            filtered.append(item)
+        
+        return filtered
+    
+    def group_by_category_type(self, wardrobe: List[ClothingItem]) -> Dict[str, List[ClothingItem]]:
+        """Group items by category type (tops, bottoms, footwear etc.)"""
+        groups = defaultdict(list)
+        for item in wardrobe:
+            category_type = self.get_category_type(item.category)
+            groups[category_type].append(item)
+        return dict(groups)
+    
+    def create_compact_wardrobe(self, wardrobe: List[ClothingItem]) -> str:
+        """Ultra compact wardrobe representation - flexible categories"""
+        groups = self.group_by_category_type(wardrobe)
+        compact_parts = []
+        
+        for category_type, items in groups.items():
+            item_strings = []
+            for item in items:
+                colors = item.colors[0] if item.colors else item.color or "neutral"
+                item_strings.append(f"{item.id}:{item.name}({colors})")
+            
+            compact_parts.append(f"{category_type}[{','.join(item_strings)}]")
+        
+        return " | ".join(compact_parts)
+    
+    def validate_outfit_structure(self, suggested_items: List[Dict]) -> bool:
+        """Kombin yapısını validate et - flexible"""
+        suggested_categories = [item.get("category", "") for item in suggested_items]
+        category_types = [self.get_category_type(cat) for cat in suggested_categories]
+        
+        # En az bir üst, bir alt/elbise ve bir ayakkabı olmalı
+        has_top_or_dress = any(ct in ['tops', 'dresses'] for ct in category_types)
+        has_bottom_or_dress = any(ct in ['bottoms', 'dresses'] for ct in category_types)
+        has_footwear = any(ct == 'footwear' for ct in category_types)
+        
+        return has_top_or_dress and (has_bottom_or_dress or 'dresses' in category_types) and has_footwear
+    
+    def sample_wardrobe(self, wardrobe: List[ClothingItem], max_items: int = 30) -> List[ClothingItem]:
+        """Smart sampling for large wardrobes"""
+        if len(wardrobe) <= max_items:
+            return wardrobe
+        
+        groups = self.group_by_category_type(wardrobe)
+        sampled = []
+        
+        # Her kategori tipinden eşit sayıda al
+        items_per_type = max(2, max_items // len(groups))
+        
+        for category_type, items in groups.items():
+            sample_size = min(len(items), items_per_type)
+            sampled.extend(random.sample(items, sample_size))
+        
+        return sampled[:max_items]
+    
+    def create_compact_wardrobe(self, wardrobe: List[ClothingItem]) -> str:
+        """Ultra compact wardrobe representation"""
+        groups = self.group_by_category(wardrobe)
+        compact_parts = []
+        
+        for category, items in groups.items():
+            item_strings = []
+            for item in items:
+                colors = item.colors[0] if item.colors else item.color or "neutral"
+                item_strings.append(f"{item.id}:{item.name}({colors})")
+            
+            compact_parts.append(f"{category}[{','.join(item_strings)}]")
+        
+        return " | ".join(compact_parts)
+    
+    def get_recent_items(self, last_outfits: List) -> Set[str]:
+        """Get recently used item IDs"""
+        recent = set()
+        for outfit in last_outfits[-3:]:  # Son 3 kombin
+            recent.update(outfit.items)
+        return recent
+    
+    def create_prompt(self, request: OutfitRequest, gender: str) -> str:
+        """Yeni minimal prompt sistemi"""
+        
+        # 1. Wardrobe filtering & sampling
+        filtered_wardrobe = self.filter_wardrobe(
+            request.wardrobe, 
+            request.weather_condition, 
+            request.occasion
+        )
+        
+        if len(filtered_wardrobe) > 30:
+            filtered_wardrobe = self.sample_wardrobe(filtered_wardrobe, 30)
+        
+        # 2. Compact representation
+        wardrobe_compact = self.create_compact_wardrobe(filtered_wardrobe)
+        
+        # 3. Recent items to avoid
+        recent_items = self.get_recent_items(request.last_5_outfits)
+        recent_str = f"Recently used: {','.join(list(recent_items)[:8])}" if recent_items else ""
+        
+        # 4. Plan-based prompt selection
+        if request.plan == 'premium':
+            return self._create_premium_prompt(request, gender, wardrobe_compact, recent_str)
+        else:
+            return self._create_free_prompt(request, gender, wardrobe_compact, recent_str)
+    
+    def _create_free_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
+        """Free plan minimal prompt"""
+        return f"""Create {gender} outfit for {request.occasion} in {request.weather_condition} weather.
+Language: {request.language}
+
+Items: {wardrobe}
+{recent}
+
+Select: top/dress + bottom (if not dress) + footwear + optional outerwear
+JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":""}}"""
+    
+    def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
+        """Premium plan enhanced prompt"""
+        return f"""Expert {gender} styling for {request.occasion} in {request.weather_condition}.
+Language: {request.language}
+
+Wardrobe: {wardrobe}
+{recent}
+
+Create stylish outfit with color harmony and fashion insights. Include top/dress, bottom (if not dress), footwear, optional outerwear/accessories.
+JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
+
+# Global engine instance
+outfit_engine = SmartOutfitEngine()
+
 async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_id)):
-    """Usage kontrolü yapar ve kullanıcı verilerini döndürür"""
+    """Usage kontrolü ve user data"""
     today = str(date.today())
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
@@ -31,223 +248,105 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     user_data = user_doc.to_dict()
     plan = user_data.get("plan", "free")
 
-    # Usage verilerini kontrol et/başlat
+    # Usage check
     if user_data.get("usage", {}).get("date") != today:
         user_data["usage"] = {"count": 0, "date": today}
         user_ref.update({"usage": user_data["usage"]})
     
-    limit = PLAN_LIMITS.get(plan, 0)
     current_usage = user_data.get("usage", {}).get("count", 0)
+    limit = PLAN_LIMITS.get(plan, 0)
     
-    # Premium planı için sınırsız kontrol
-    if plan == "premium":
-        # Premium kullanıcılar için limit kontrolü yok
-        pass
-    elif current_usage >= limit:
-        plan_name = plan.capitalize()
+    if plan != "premium" and current_usage >= limit:
         raise HTTPException(
             status_code=429, 
-            detail=f"Daily limit of {limit} requests reached for {plan_name} plan. Please upgrade your plan or try again tomorrow."
+            detail=f"Daily limit of {limit} requests reached for {plan.capitalize()} plan."
         )
         
     return {"user_id": user_id, "gender": user_data.get("gender", "unisex"), "plan": plan}
 
-
-def create_outfit_prompt(request: OutfitRequest, gender: str) -> str:
-    """Plana göre dinamik olarak prompt oluşturur - yeni optimized format destekli."""
-    
-    # Yeni optimized format - colors array ve style array destekli
-    wardrobe_items = []
-    for item in request.wardrobe:
-        # Çoklu renk desteği - colors varsa onu kullan, yoksa color'dan oluştur
-        if hasattr(item, 'colors') and item.colors:
-            colors_str = ",".join(item.colors)
-        else:
-            colors_str = item.color
-            
-        # Çoklu stil desteği - style array veya string olabilir
-        if hasattr(item, 'style'):
-            if isinstance(item.style, list):
-                styles_str = ",".join(item.style)
-            else:
-                styles_str = item.style
-        else:
-            styles_str = 'casual'
-            
-        # Mevsim desteği
-        seasons_str = ",".join(item.season) if hasattr(item, 'season') and item.season else 'all'
-        
-        wardrobe_items.append(f"{item.id}|{item.name}|{item.category}|{colors_str}|{styles_str}|{seasons_str}")
-    
-    wardrobe_str = "\n".join(wardrobe_items)
-
-    # Recent items analizi - yeni format ile
-    recent_items_info = ""
-    if request.last_5_outfits:
-        recent_items = {
-            item.name for outfit in request.last_5_outfits 
-            for item_id in outfit.items
-            if (item := next((it for it in request.wardrobe if it.id == item_id), None))
-        }
-        if recent_items:
-            recent_items_info = f"RECENTLY USED: {', '.join(recent_items)} - Try to suggest different items for variety."
-
-    # Context bilgileri - yeni format ile
-    context_info = ""
-    if hasattr(request, 'context') and request.context:
-        total_wardrobe = getattr(request.context, 'total_wardrobe_size', len(request.wardrobe))
-        filtered_wardrobe = getattr(request.context, 'filtered_wardrobe_size', len(request.wardrobe))
-        context_info = f"WARDROBE INFO: Total items: {total_wardrobe}, Filtered for relevance: {filtered_wardrobe}"
-
-    # Premium plan için Pinterest links
-    pinterest_json_format = ""
-    if request.plan == 'premium':
-        pinterest_json_format = f'''
-"pinterest_links": [
-    {{"title": "Specific color + gender combination title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q=selected+colors+{gender}+kombin+{request.language}"}},
-    {{"title": "Gender + occasion specific styling title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+occasion+outfit+{request.language}"}},
-    {{"title": "Gender + weather appropriate outfit title in {request.language}", "url": "https://www.pinterest.com/search/pins/?q={gender}+weather+kıyafet+{request.language}"}}
-]'''
-
-    prompt = f"""Fashion stylist for {gender} user. Respond ONLY in {request.language}.
-
-WARDROBE (ID|Name|Category|Colors|Styles|Seasons):
-{wardrobe_str}
-
-CONTEXT: Weather={request.weather_condition}, Occasion={request.occasion}
-{context_info}
-{recent_items_info}
-
-STYLING RULES:
-1. Select 3-4 items: 1 top + 1 bottom + 1 footwear + optional outerwear/accessories.
-2. Use EXACT IDs/names/categories from wardrobe.
-3. Consider weather: 
-   - Hot weather (25°C+) = Light fabrics, no heavy outerwear
-   - Cold weather (10°C-) = Layers, warm outerwear required
-   - Match season tags with weather condition
-4. Consider occasion appropriateness using style tags.
-5. Use color combinations that work well together.
-6. Translate color names to {request.language} in descriptions.
-7. Create variety - avoid recently used items when possible.
-8. For premium users, provide detailed styling tips and color theory insights.
-
-JSON FORMAT:
-{{
-"items": [{{"id": "exact_id", "name": "exact_name", "category": "exact_category"}}],
-"description": "Detailed outfit description in {request.language} with translated colors and styling rationale",
-"suggestion_tip": "{"Advanced styling advice with color theory and fashion principles" if request.plan == "premium" else "Simple styling tip"} in {request.language}"
-{',' if pinterest_json_format else ''} {pinterest_json_format}
-}}
-
-PINTEREST EXAMPLES (Premium only):
-✓ "Mavi ve Beyaz {gender.title()} Kombin Önerileri"
-✓ "{gender.title()} {request.occasion.replace('-', ' ').title()} Kıyafet Fikirleri"  
-✓ "{request.weather_condition.title()} Hava {gender.title()} Kombinler"
-✗ "Renk kombinasyonları" (too generic)
-✗ "Günlük stil önerileri" (no gender, too vague)"""
-    
-    return prompt
-
-
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
-    """Outfit önerisi oluşturur - optimized format ve sınırsız premium destekli"""
+    """Yeni nesil kombin önerisi"""
     user_id = user_info["user_id"]
     plan = user_info["plan"]
     
-    # Client'tan gelen gender bilgisini kullan, yoksa veritabanından al
+    # Gender determination
     gender = request.gender if request.gender in ['male', 'female'] else user_info.get("gender", "unisex")
     
-    # Wardrobe boyut kontrolü - performans için
-    wardrobe_size = len(request.wardrobe)
-    if wardrobe_size == 0:
+    # Wardrobe validation
+    if not request.wardrobe:
         raise HTTPException(status_code=400, detail="No wardrobe items provided.")
     
-    # Büyük wardrobe'lar için log
-    if wardrobe_size > 200:
-        print(f"⚠️ Large wardrobe detected: {wardrobe_size} items for user {user_id[:8]}...")
-    
-    prompt = create_outfit_prompt(request, gender)
+    # Create optimized prompt
+    prompt = outfit_engine.create_prompt(request, gender)
     
     try:
-        # Plan bazlı model ve token limitleri
-        max_tokens = 1200 if plan == "premium" else 800
-        temperature = 0.9 if plan == "premium" else 0.8
+        # Plan-based AI configuration
+        ai_config = {
+            "free": {"max_tokens": 500, "temperature": 0.7},
+            "premium": {"max_tokens": 800, "temperature": 0.8}
+        }
+        
+        config = ai_config.get(plan, ai_config["free"])
         
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system", 
-                    "content": f"You are a professional fashion stylist for {plan} plan users. Respond ONLY in {request.language}. Return JSON format with exact wardrobe items."
+                    "content": f"Fashion stylist. Respond in {request.language} with exact JSON format only."
                 },
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=0.9,
-            seed=None
+            **config
         )
         
         response_content = completion.choices[0].message.content
         if not response_content:
-            raise HTTPException(status_code=500, detail="AI returned an empty response.")
+            raise HTTPException(status_code=500, detail="AI returned empty response.")
         
         try:
             outfit_response = json.loads(response_content)
             
+            # Validation
             if not outfit_response.get("items"):
-                raise HTTPException(status_code=500, detail="No items returned by AI.")
+                raise HTTPException(status_code=500, detail="No items in AI response.")
             
-            # Validasyon: Footwear kontrolü
-            categories = {item.get("category", "").lower() for item in outfit_response.get("items", [])}
-            footwear_subcategories = {
-                "sneakers", "heels", "boots", "sandals", "flats", "loafers", 
-                "wedges", "classic-shoes", "boat-shoes"
-            }
-
-            if not any(cat in footwear_subcategories for cat in categories):
-                raise HTTPException(status_code=500, detail="No footwear included in outfit suggestion.")
-            
-            # Validasyon: Item ID'lerin wardrobe'da olup olmadığı
+            # Check if items exist in wardrobe
             suggested_ids = {item.get("id") for item in outfit_response.get("items", [])}
             wardrobe_ids = {item.id for item in request.wardrobe}
             invalid_ids = suggested_ids - wardrobe_ids
             
             if invalid_ids:
-                raise HTTPException(
-                    status_code=500, 
-                    detail=f"AI suggested non-existent items: {list(invalid_ids)}"
-                )
+                raise HTTPException(status_code=500, detail=f"AI suggested invalid items: {list(invalid_ids)}")
+            
+            # Check outfit structure with flexible validation
+            if not outfit_engine.validate_outfit_structure(outfit_response.get("items", [])):
+                raise HTTPException(status_code=500, detail="Incomplete outfit structure.")
                 
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=500, detail=f"Invalid JSON response from AI: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Invalid JSON from AI: {str(e)}")
         
-        # Usage'ı artır - Premium için de say ama limit yok
+        # Update usage
         db.collection('users').document(user_id).update({
-            'usage.count': firestore.Increment(1),
-            'usage.date': str(date.today())
+            'usage.count': firestore.Increment(1)
         })
         
         # Success log
-        suggestion_count = len(outfit_response.get("items", []))
-        has_pinterest = bool(outfit_response.get("pinterest_links"))
-        print(f"✅ Outfit suggestion created: {suggestion_count} items, Plan: {plan}, Pinterest: {has_pinterest}")
+        print(f"✅ Outfit created: {len(outfit_response.get('items', []))} items, Plan: {plan}")
         
         return outfit_response
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ AI suggestion error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get suggestion from AI: {str(e)}")
+        print(f"❌ AI error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI suggestion failed: {str(e)}")
 
-
-# Yardımcı endpoint - kullanıcının günlük usage durumunu kontrol etmek için
 @router.get("/usage-status")
 async def get_usage_status(user_id: str = Depends(get_current_user_id)):
-    """Kullanıcının günlük kullanım durumunu döndürür"""
+    """Usage status endpoint"""
     today = str(date.today())
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
@@ -259,12 +358,7 @@ async def get_usage_status(user_id: str = Depends(get_current_user_id)):
     plan = user_data.get("plan", "free")
     usage_data = user_data.get("usage", {})
     
-    # Bugünün usage'ı yoksa sıfırla
-    if usage_data.get("date") != today:
-        current_usage = 0
-    else:
-        current_usage = usage_data.get("count", 0)
-    
+    current_usage = usage_data.get("count", 0) if usage_data.get("date") == today else 0
     limit = PLAN_LIMITS.get(plan, 0)
     
     return {
