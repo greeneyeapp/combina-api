@@ -164,17 +164,17 @@ class SmartOutfitEngine:
         return sampled[:max_items]
     
     def create_compact_wardrobe(self, wardrobe: List[ClothingItem]) -> str:
-        """Ultra compact wardrobe representation - flexible categories"""
-        groups = self.group_by_category_type(wardrobe)  # Bu satırı değiştir
+        """Ultra compact wardrobe representation"""
+        groups = self.group_by_category(wardrobe)
         compact_parts = []
         
-        for category_type, items in groups.items():  # category yerine category_type
+        for category, items in groups.items():
             item_strings = []
             for item in items:
                 colors = item.colors[0] if item.colors else item.color or "neutral"
                 item_strings.append(f"{item.id}:{item.name}({colors})")
             
-            compact_parts.append(f"{category_type}[{','.join(item_strings)}]")  # category yerine category_type
+            compact_parts.append(f"{category}[{','.join(item_strings)}]")
         
         return " | ".join(compact_parts)
     
@@ -266,7 +266,6 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
 
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
-    
     """Yeni nesil kombin önerisi"""
     user_id = user_info["user_id"]
     plan = user_info["plan"]
@@ -282,15 +281,6 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
     prompt = outfit_engine.create_prompt(request, gender)
     
     try:
-        
-        print(f"🔍 Debug - Request received: {request.occasion}, {request.weather_condition}")
-        print(f"🔍 Debug - Wardrobe size: {len(request.wardrobe)}")
-        print(f"🔍 Debug - Gender: {gender}, Plan: {plan}")
-        
-        # Create optimized prompt
-        prompt = outfit_engine.create_prompt(request, gender)
-        print(f"🔍 Debug - Prompt created successfully")
-        
         # Plan-based AI configuration
         ai_config = {
             "free": {"max_tokens": 500, "temperature": 0.7},
