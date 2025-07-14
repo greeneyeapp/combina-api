@@ -23,7 +23,7 @@ PLAN_LIMITS = {
 }
 
 class SmartOutfitEngine:
-    """Yeni nesil kombin öneri motoru - Clean Final Version"""
+    """Yeni nesil kombin öneri motoru - Full Debug Version"""
     
     def __init__(self):
         print("🔧 SmartOutfitEngine initializing...")
@@ -89,7 +89,7 @@ class SmartOutfitEngine:
                 print(f"   ✅ Category '{category}' classified as '{category_type}'")
                 return category_type
         print(f"   ⚠️ Category '{category}' classified as 'other'")
-        return 'other'
+        return 'other'  # Bilinmeyen kategoriler için
     
     def filter_wardrobe(self, wardrobe: List[ClothingItem], weather: str, occasion: str) -> List[ClothingItem]:
         """Context-aware wardrobe filtering - flexible keyword system"""
@@ -304,24 +304,14 @@ JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_above"}}],"
         """Premium plan enhanced prompt"""
         print(f"   💎 Creating PREMIUM plan prompt")
         
-        lang = request.language
-        occasion = request.occasion
-        weather = request.weather_condition
-        
-        return f"""Expert {gender} styling: {occasion}, {weather}.
-Language: {lang}
+        return f"""Expert {gender} styling: {request.occasion}, {request.weather_condition}.
+Language: {request.language}
 
 Wardrobe: {wardrobe}
 {recent}
 
 CRITICAL: Use EXACT category names from wardrobe above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
 Required: 1 top + 1 bottom + 1 footwear + optional outerwear/accessories.
-
-Pinterest examples for better links:
-- Color + gender + occasion: "{gender} {occasion} blue shirt black pants"
-- Weather + gender + style: "{gender} {weather} weather outfit"
-- Specific items + gender: "{gender} white sneakers styling ideas"
-- Create 2-3 specific, searchable Pinterest links
 
 JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_wardrobe"}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
 
@@ -369,7 +359,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
 
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
-    """Yeni nesil kombin önerisi - Clean Final Version"""
+    """Yeni nesil kombin önerisi - Full Debug Version"""
     try:
         print(f"🚀 ========== OUTFIT SUGGESTION START ==========")
         print(f"🔍 Step 1: Initial data extraction")
