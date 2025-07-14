@@ -200,7 +200,7 @@ class SmartOutfitEngine:
         return recent
     
     def validate_outfit_structure(self, suggested_items: List[Dict]) -> bool:
-        """Kombin yapısını validate et - basit ve etkili"""
+        """Kombin yapısını validate et - daha esnek erkek kuralları"""
         print(f"🔍 Validating outfit structure for {len(suggested_items)} items")
         
         suggested_categories = [item.get("category", "") for item in suggested_items]
@@ -221,14 +221,23 @@ class SmartOutfitEngine:
         print(f"      - Has footwear: {has_footwear}")
         print(f"      - Has dress: {has_dress}")
         
-        # Basit validation: 
-        # 1. (Top + Bottom + Footwear) VEYA (Dress + Footwear)
-        is_valid = has_footwear and (
+        # İdeal validation: (Top + Bottom + Footwear) VEYA (Dress + Footwear)
+        ideal_valid = has_footwear and (
             (has_top_or_dress and has_bottom_or_dress) or has_dress
         )
         
-        print(f"   ✅ Structure valid: {is_valid}")
-        return is_valid
+        if ideal_valid:
+            print(f"   ✅ Structure valid (ideal): {ideal_valid}")
+            return True
+        
+        # Esnek validation: En az top + footwear varsa geçerli say
+        minimal_valid = has_top_or_dress and has_footwear
+        if minimal_valid:
+            print(f"   ⚠️ Structure valid (minimal): top + footwear only")
+            return True
+        
+        print(f"   ❌ Structure invalid: missing essential items")
+        return False
     
     def create_prompt(self, request: OutfitRequest, gender: str) -> str:
         """Yeni minimal prompt sistemi"""
@@ -268,17 +277,21 @@ class SmartOutfitEngine:
     def _create_free_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
         """Free plan minimal prompt"""
         print(f"   🔸 Creating FREE plan prompt")
+        
+        structure_req = "REQUIRED: top + bottom + footwear. OPTIONAL: outerwear/accessories"
+        if gender == "female":
+            structure_req = "REQUIRED: (top + bottom + footwear) OR (dress + footwear). OPTIONAL: outerwear/accessories"
+            
         return f"""Create {gender} outfit for {request.occasion} in {request.weather_condition} weather.
 Response language: {request.language}
 
 Available items: {wardrobe}
 {recent}
 
-Rules:
-- Select: top + bottom + footwear OR dress + footwear
-- Optional: outerwear/accessories
+{structure_req}
 - Use EXACT category names from wardrobe (keep English: top, bottom, footwear, outerwear, dress, etc.)
 - Translate only name and description to {request.language}
+- MUST include at least 3 items for complete outfit
 
 JSON format:
 {{"items":[{{"id":"exact_id","name":"translated_name","category":"english_category"}}],"description":"description_in_{request.language}","suggestion_tip":"tip_in_{request.language}"}}"""
@@ -286,6 +299,11 @@ JSON format:
     def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
         """Premium plan enhanced prompt"""
         print(f"   💎 Creating PREMIUM plan prompt")
+        
+        structure_req = "REQUIRED: top + bottom + footwear. OPTIONAL: outerwear/accessories"
+        if gender == "female":
+            structure_req = "REQUIRED: (top + bottom + footwear) OR (dress + footwear). OPTIONAL: outerwear/accessories"
+            
         return f"""Expert {gender} styling for {request.occasion} in {request.weather_condition}.
 Response language: {request.language}
 
@@ -293,11 +311,10 @@ Wardrobe: {wardrobe}
 {recent}
 
 Create complete outfit with color harmony and fashion principles.
-Rules:
-- Select: top + bottom + footwear OR dress + footwear
-- Add outerwear/accessories for style
+{structure_req}
 - Use EXACT category names from wardrobe (keep English: top, bottom, footwear, outerwear, dress, etc.)
 - Translate only name, description, and tips to {request.language}
+- MUST include at least 3 items for complete outfit
 
 JSON format:
 {{"items":[{{"id":"exact_id","name":"translated_name","category":"english_category"}}],"description":"description_in_{request.language}","suggestion_tip":"tip_in_{request.language}","pinterest_links":[{{"title":"title_in_{request.language}","url":"pinterest_url"}}]}}"""
