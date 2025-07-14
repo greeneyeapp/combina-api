@@ -67,7 +67,7 @@ class SmartOutfitEngine:
             'date': ['party', 'casual', 'formal']
         }
         
-        # Category mapping - flexible (AI de bu generic terimleri kullanabilir)
+        # Category mapping - English only (client sends English categories)
         self.category_types = {
             'tops': ['t-shirt', 'shirt', 'blouse', 'top', 'bodysuit', 'crop-top', 'tank-top', 'sweater', 'cardigan', 'hoodie', 'turtleneck', 'polo-shirt', 'henley-shirt'],
             'bottoms': ['jeans', 'trousers', 'leggings', 'joggers', 'skirt', 'shorts', 'culottes', 'chino-trousers', 'cargo-pants', 'bottom', 'bottoms'],
@@ -269,25 +269,38 @@ class SmartOutfitEngine:
         """Free plan minimal prompt"""
         print(f"   🔸 Creating FREE plan prompt")
         return f"""Create {gender} outfit for {request.occasion} in {request.weather_condition} weather.
-Language: {request.language}
+Response language: {request.language}
 
-Items: {wardrobe}
+Available items: {wardrobe}
 {recent}
 
-Select: top + bottom + footwear OR dress + footwear. Optional: outerwear/accessories.
-JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":""}}"""
+Rules:
+- Select: top + bottom + footwear OR dress + footwear
+- Optional: outerwear/accessories
+- Use EXACT category names from wardrobe (keep English: top, bottom, footwear, outerwear, dress, etc.)
+- Translate only name and description to {request.language}
+
+JSON format:
+{{"items":[{{"id":"exact_id","name":"translated_name","category":"english_category"}}],"description":"description_in_{request.language}","suggestion_tip":"tip_in_{request.language}"}}"""
     
     def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
         """Premium plan enhanced prompt"""
         print(f"   💎 Creating PREMIUM plan prompt")
         return f"""Expert {gender} styling for {request.occasion} in {request.weather_condition}.
-Language: {request.language}
+Response language: {request.language}
 
 Wardrobe: {wardrobe}
 {recent}
 
-Create complete outfit: top + bottom + footwear OR dress + footwear. Add outerwear/accessories for style. Use color harmony and fashion principles.
-JSON: {{"items":[{{"id":"","name":"","category":""}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
+Create complete outfit with color harmony and fashion principles.
+Rules:
+- Select: top + bottom + footwear OR dress + footwear
+- Add outerwear/accessories for style
+- Use EXACT category names from wardrobe (keep English: top, bottom, footwear, outerwear, dress, etc.)
+- Translate only name, description, and tips to {request.language}
+
+JSON format:
+{{"items":[{{"id":"exact_id","name":"translated_name","category":"english_category"}}],"description":"description_in_{request.language}","suggestion_tip":"tip_in_{request.language}","pinterest_links":[{{"title":"title_in_{request.language}","url":"pinterest_url"}}]}}"""
 
 # Global engine instance
 print("🚀 Initializing SmartOutfitEngine...")
