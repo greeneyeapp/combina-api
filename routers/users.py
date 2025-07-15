@@ -63,7 +63,7 @@ async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_c
 
 @router.get("/profile")
 async def get_user_profile(user_id: str = Depends(get_current_user_id)):
-    """Kullanıcının profil bilgilerini döndürür"""
+    """Kullanıcının profil bilgilerini döndürür (Ödüllü haklar dahil edildi)"""
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
     
@@ -74,16 +74,24 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
     today = str(date.today())
     
     # Günlük usage'ı kontrol et ve gerekirse sıfırla
-    if user_data.get("usage", {}).get("date") != today:
-        user_data["usage"] = {"count": 0, "date": today}
-        user_ref.update({"usage": user_data["usage"]})
+    usage_data = user_data.get("usage", {})
+    if usage_data.get("date") != today:
+        usage_data = {"count": 0, "date": today, "rewarded_count": 0}
+        user_ref.update({"usage": usage_data})
     
-    plan_limits = {"free": 2, "standard": 10, "premium": 50}
+    plan_limits = {"free": 2, "premium": float('inf')}
     plan = user_data.get("plan", "free")
     daily_limit = plan_limits.get(plan, 2)
-    current_usage = user_data.get("usage", {}).get("count", 0)
-    remaining = max(0, daily_limit - current_usage)
-    percentage_used = round((current_usage / daily_limit) * 100, 1) if daily_limit > 0 else 0
+    current_usage = usage_data.get("usage", {}).get("count", 0)
+    
+    # --- YENİ MANTIK ---
+    # Ödüllü hakları da hesaba kat
+    rewarded_count = usage_data.get("rewarded_count", 0)
+    effective_limit = daily_limit + rewarded_count # Toplam efektif limit
+
+    remaining = max(0, effective_limit - current_usage)
+    percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
+    # --- YENİ MANTIK BİTİŞ ---
     
     return {
         "user_id": user_id,
@@ -93,6 +101,7 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         "plan": plan,
         "usage": {
             "daily_limit": daily_limit,
+            "rewarded_count": rewarded_count, # Client'a bu yeni bilgiyi gönderiyoruz
             "current_usage": current_usage,
             "remaining": remaining,
             "percentage_used": percentage_used,
