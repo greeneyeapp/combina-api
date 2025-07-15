@@ -63,7 +63,7 @@ async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_c
 
 @router.get("/profile")
 async def get_user_profile(user_id: str = Depends(get_current_user_id)):
-    """Kullanıcının profil bilgilerini döndürür (Ödüllü haklar dahil edildi)"""
+    """Kullanıcının profil bilgilerini döndürür (Veri tutarlılığı ve sıfırlama mantığı düzeltildi)"""
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
     
@@ -71,27 +71,30 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         raise HTTPException(status_code=404, detail="User profile not found.")
     
     user_data = user_doc.to_dict()
-    today = str(date.today())
+    today_str = str(date.today())
     
-    # Günlük usage'ı kontrol et ve gerekirse sıfırla
+    # Mevcut kullanım verisini al
     usage_data = user_data.get("usage", {})
-    if usage_data.get("date") != today:
-        usage_data = {"count": 0, "date": today, "rewarded_count": 0}
+    
+    # Eğer tarih eski ise, hem lokal değişkeni hem de veritabanını sıfırla
+    if usage_data.get("date") != today_str:
+        print(f"🔄 Day has changed. Resetting usage for user {user_id[:8]}.")
+        usage_data = {"count": 0, "date": today_str, "rewarded_count": 0}
         user_ref.update({"usage": usage_data})
     
-    plan_limits = {"free": 2, "premium": float('inf')}
     plan = user_data.get("plan", "free")
+    plan_limits = {"free": 2, "premium": float('inf')}
     daily_limit = plan_limits.get(plan, 2)
-    current_usage = usage_data.get("usage", {}).get("count", 0)
     
-    # --- YENİ MANTIK ---
-    # Ödüllü hakları da hesaba kat
+    # Değerleri her zaman güncel olan `usage_data` objesinden oku
+    current_usage = usage_data.get("count", 0)
     rewarded_count = usage_data.get("rewarded_count", 0)
-    effective_limit = daily_limit + rewarded_count # Toplam efektif limit
+    
+    # Toplam kullanılabilir hakkı hesapla
+    effective_limit = daily_limit + rewarded_count if plan != "premium" else float('inf')
 
-    remaining = max(0, effective_limit - current_usage)
-    percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
-    # --- YENİ MANTIK BİTİŞ ---
+    remaining = max(0, effective_limit - current_usage) if plan != "premium" else float('inf')
+    percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 and plan != "premium" else 0
     
     return {
         "user_id": user_id,
@@ -101,11 +104,11 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         "plan": plan,
         "usage": {
             "daily_limit": daily_limit,
-            "rewarded_count": rewarded_count, # Client'a bu yeni bilgiyi gönderiyoruz
+            "rewarded_count": rewarded_count,
             "current_usage": current_usage,
             "remaining": remaining,
             "percentage_used": percentage_used,
-            "date": today
+            "date": today_str
         },
         "created_at": user_data.get("createdAt")
     }
