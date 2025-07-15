@@ -369,153 +369,85 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
 
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
-    """Yeni nesil kombin önerisi - Full Debug Version"""
+    """Yeni nesil kombin önerisi - AI yanıtını temizleme mantığı ile"""
     try:
-        print(f"🚀 ========== OUTFIT SUGGESTION START ==========")
-        print(f"🔍 Step 1: Initial data extraction")
-        
+        print("🚀 ========== OUTFIT SUGGESTION START ==========")
         user_id = user_info["user_id"]
         plan = user_info["plan"]
-        print(f"   ✅ User ID: {user_id[:8]}..., Plan: {plan}")
-        
-        # Gender determination
         gender = request.gender if request.gender in ['male', 'female'] else user_info.get("gender", "unisex")
-        print(f"   ✅ Gender determined: {gender}")
-        
-        # Request data
-        print(f"🔍 Step 2: Request validation")
-        print(f"   ✅ Occasion: {request.occasion}")
-        print(f"   ✅ Weather: {request.weather_condition}")
-        print(f"   ✅ Language: {request.language}")
-        print(f"   ✅ Wardrobe size: {len(request.wardrobe)}")
-        print(f"   ✅ Last outfits count: {len(request.last_5_outfits)}")
-        
-        # DETAYLI CLIENT DATA LOGLAMA
-        print(f"📦 Step 2.1: Client wardrobe sample")
-        for i, item in enumerate(request.wardrobe[:3]):  # İlk 3 item
-            print(f"   📝 Item {i+1}: id={item.id}, name='{item.name}', category='{item.category}', colors={item.colors or [item.color]}, style={item.style}")
-        
-        if len(request.wardrobe) > 3:
-            print(f"   📋 ... and {len(request.wardrobe) - 3} more items")
-            
-        print(f"📦 Step 2.2: Client outfit history sample")
-        for i, outfit in enumerate(request.last_5_outfits[:2]):  # İlk 2 outfit
-            print(f"   📝 Outfit {i+1}: items={outfit.items}, occasion='{outfit.occasion}', weather='{outfit.weather}'")
-        
-        if len(request.last_5_outfits) > 2:
-            print(f"   📋 ... and {len(request.last_5_outfits) - 2} more outfits")
-        
-        # Wardrobe validation
-        if not request.wardrobe:
-            print(f"   ❌ No wardrobe items provided")
-            raise HTTPException(status_code=400, detail="No wardrobe items provided.")
-        
-        print(f"🔍 Step 3: Creating prompt")
-        # Create optimized prompt
+
         prompt = outfit_engine.create_prompt(request, gender)
-        print(f"   ✅ Prompt created - Length: {len(prompt)} chars")
-        print(f"   📝 Prompt preview: {prompt[:200]}...")
         
-        print(f"🔍 Step 4: AI Configuration")
-        # Plan-based AI configuration
-        ai_config = {
-            "free": {"max_tokens": 500, "temperature": 0.7},
-            "premium": {"max_tokens": 800, "temperature": 0.8}
-        }
-        
+        ai_config = {"free": {"max_tokens": 500, "temperature": 0.7}, "premium": {"max_tokens": 800, "temperature": 0.8}}
         config = ai_config.get(plan, ai_config["free"])
-        print(f"   ✅ AI Config: {config}")
-        
-        print(f"🔍 Step 5: OpenAI API Call")
-        print(f"   🔄 Calling OpenAI API...")
-        
+
+        print("🔍 Step 5: OpenAI API Call...")
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "system", 
-                    "content": f"Fashion stylist. Respond in {request.language} with exact JSON format only."
-                },
+                {"role": "system", "content": f"Fashion stylist. Respond in {request.language} with exact JSON format only."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
             **config
         )
-        print(f"   ✅ OpenAI API call successful")
         
-        print(f"🔍 Step 6: Processing AI Response")
         response_content = completion.choices[0].message.content
-        print(f"   ✅ Response received - Length: {len(response_content) if response_content else 0} chars")
-        
         if not response_content:
-            print(f"   ❌ AI returned empty response")
             raise HTTPException(status_code=500, detail="AI returned empty response.")
-        
-        print(f"   📝 AI Response: {response_content}")
-        
-        print(f"🔍 Step 7: JSON Parsing")
+
+        print(f"   📝 Raw AI Response: {response_content}")
+
         try:
             outfit_response = json.loads(response_content)
-            print(f"   ✅ JSON parsed successfully")
-            print(f"   📊 Response keys: {list(outfit_response.keys())}")
         except json.JSONDecodeError as e:
-            print(f"   ❌ JSON decode error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Invalid JSON from AI: {str(e)}")
-        
-        print(f"🔍 Step 8: Validation")
+
+        print("🔍 Step 8: Sanitizing and Validating AI Response")
         if not outfit_response.get("items"):
-            print(f"   ❌ No items in AI response")
-            raise HTTPException(status_code=500, detail="No items in AI response.")
+            raise HTTPException(status_code=500, detail="AI response is missing 'items' key.")
         
-        print(f"   ✅ Items count: {len(outfit_response.get('items', []))}")
+        wardrobe_map = {item.id: item for item in request.wardrobe}
         
-        # Check if items exist in wardrobe
-        suggested_ids = {item.get("id") for item in outfit_response.get("items", [])}
-        wardrobe_ids = {item.id for item in request.wardrobe}
-        invalid_ids = suggested_ids - wardrobe_ids
+        sanitized_items = []
+        for suggested_item in outfit_response.get("items", []):
+            item_id = suggested_item.get("id")
+            
+            if item_id and item_id in wardrobe_map:
+                correct_item = wardrobe_map[item_id]
+                sanitized_items.append({
+                    "id": correct_item.id,
+                    "name": correct_item.name,
+                    "category": correct_item.category
+                })
+                print(f"   ✅ Item validated and sanitized: {item_id}")
+            else:
+                print(f"   ⚠️ Invalid or missing ID found, discarding item: {suggested_item}")
+
+        outfit_response["items"] = sanitized_items
+        print(f"   📊 Sanitized items count: {len(sanitized_items)}")
+
+        print("🔍 Step 9: Final Outfit Structure Validation")
+        if not outfit_engine.validate_outfit_structure(outfit_response["items"]):
+            raise HTTPException(status_code=500, detail="AI created an incomplete or invalid outfit structure.")
         
-        print(f"   📋 Suggested IDs: {suggested_ids}")
-        print(f"   📋 Wardrobe IDs (first 10): {list(wardrobe_ids)[:10]}...")
+        print("   ✅ Final outfit structure is valid")
+
+        print("🔍 Step 10: Database Update")
+        db.collection('users').document(user_id).update({'usage.count': firestore.Increment(1)})
+        print("   ✅ Usage count updated")
         
-        if invalid_ids:
-            print(f"   ❌ Invalid item IDs: {invalid_ids}")
-            raise HTTPException(status_code=500, detail=f"AI suggested invalid items: {list(invalid_ids)}")
-        
-        print(f"   ✅ All suggested items exist in wardrobe")
-        
-        # Check outfit structure with flexible validation
-        print(f"🔍 Step 9: Outfit Structure Validation")
-        if not outfit_engine.validate_outfit_structure(outfit_response.get("items", [])):
-            print(f"   ❌ Incomplete outfit structure")
-            raise HTTPException(status_code=500, detail="Incomplete outfit structure.")
-        
-        print(f"   ✅ Outfit structure is valid")
-        
-        print(f"🔍 Step 10: Database Update")
-        # Update usage
-        db.collection('users').document(user_id).update({
-            'usage.count': firestore.Increment(1)
-        })
-        print(f"   ✅ Usage count updated")
-        
-        # Success log
-        suggestion_count = len(outfit_response.get("items", []))
-        has_pinterest = bool(outfit_response.get("pinterest_links"))
-        print(f"🎉 SUCCESS: Outfit created - {suggestion_count} items, Plan: {plan}, Pinterest: {has_pinterest}")
-        print(f"🚀 ========== OUTFIT SUGGESTION END ==========")
+        print("🎉 SUCCESS: Outfit created.")
         
         return outfit_response
         
     except HTTPException:
-        print(f"🚀 ========== OUTFIT SUGGESTION END (HTTP ERROR) ==========")
         raise
     except Exception as e:
-        print(f"❌ CRITICAL ERROR in suggest_outfit:")
-        print(f"   Error type: {type(e).__name__}")
-        print(f"   Error message: {str(e)}")
-        print(f"   Full traceback: {traceback.format_exc()}")
-        print(f"🚀 ========== OUTFIT SUGGESTION END (FATAL ERROR) ==========")
+        print(f"❌ CRITICAL ERROR in suggest_outfit: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"AI suggestion failed: {str(e)}")
+    finally:
+        print("🚀 ========== OUTFIT SUGGESTION END ==========")
 
 @router.get("/usage-status")
 async def get_usage_status(user_id: str = Depends(get_current_user_id)):
