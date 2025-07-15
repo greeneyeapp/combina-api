@@ -336,7 +336,7 @@ def verify_webhook_signature(signature: str, body: bytes) -> bool:
         print(f"Signature verification error: {e}")
         return False
     
-@router.post("/grant-rewarded-suggestion")
+@router.post("/grant-extra-suggestion")
 async def grant_rewarded_suggestion(user_id: str = Depends(get_current_user_id)):
     """Kullanıcıya reklam izlemesi karşılığında bir ekstra öneri hakkı verir."""
     try:
