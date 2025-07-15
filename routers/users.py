@@ -335,3 +335,36 @@ def verify_webhook_signature(signature: str, body: bytes) -> bool:
     except Exception as e:
         print(f"Signature verification error: {e}")
         return False
+    
+@router.post("/grant-rewarded-suggestion")
+async def grant_rewarded_suggestion(user_id: str = Depends(get_current_user_id)):
+    """Kullanıcıya reklam izlemesi karşılığında bir ekstra öneri hakkı verir."""
+    try:
+        user_ref = db.collection('users').document(user_id)
+        today = str(date.today())
+        
+        # Kullanıcının bugünkü kullanım verisini al
+        usage_data = user_ref.get(field_paths={'usage'}).to_dict().get('usage', {})
+        
+        # Eğer gün farklıysa, sıfırdan bir usage objesi oluştur
+        if usage_data.get("date") != today:
+            usage_data = {"count": 0, "date": today, "rewarded_count": 0}
+
+        # Ödüllü hak sayısını 1 artır
+        new_rewarded_count = usage_data.get("rewarded_count", 0) + 1
+        usage_data["rewarded_count"] = new_rewarded_count
+        
+        # Veritabanını güncelle
+        user_ref.update({"usage": usage_data})
+        
+        return {
+            "status": "success",
+            "message": "Rewarded suggestion right granted.",
+            "data": {
+                "new_rewarded_count": new_rewarded_count,
+                "date": today
+            }
+        }
+    except Exception as e:
+        print(f"Error granting rewarded suggestion: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to grant rewarded suggestion right.")

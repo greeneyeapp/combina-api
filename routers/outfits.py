@@ -162,7 +162,7 @@ class SmartOutfitEngine:
         print(f"   📝 Preview: {compact_result[:100]}...")
         return compact_result
     
-    def sample_wardrobe(self, wardrobe: List[ClothingItem], max_items: int = 30) -> List[ClothingItem]:
+    def sample_wardrobe(self, wardrobe: List[ClothingItem], max_items: int = 75) -> List[ClothingItem]:
         """Smart sampling for large wardrobes"""
         print(f"🔍 Sampling wardrobe: {len(wardrobe)} items → max {max_items}")
         
@@ -263,8 +263,8 @@ class SmartOutfitEngine:
         )
         
         print(f"   Step 2: Sampling if needed")
-        if len(filtered_wardrobe) > 30:
-            filtered_wardrobe = self.sample_wardrobe(filtered_wardrobe, 30)
+        if len(filtered_wardrobe) > 75:
+            filtered_wardrobe = self.sample_wardrobe(filtered_wardrobe, 75)
         
         # 2. Compact representation
         print(f"   Step 3: Creating compact representation")
@@ -321,7 +321,7 @@ outfit_engine = SmartOutfitEngine()
 print("✅ SmartOutfitEngine ready!")
 
 async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_id)):
-    """Usage kontrolü ve user data"""
+    """Kullanım kontrolü ve kullanıcı verisi getirme (Ödüllü reklam mantığı eklendi)"""
     print(f"🔍 Checking usage for user: {user_id[:8]}...")
     
     today = str(date.today())
@@ -336,22 +336,32 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     plan = user_data.get("plan", "free")
     print(f"   ✅ User found - Plan: {plan}")
 
-    # Usage check
-    if user_data.get("usage", {}).get("date") != today:
+    # Günlük usage'ı kontrol et ve gerekirse sıfırla
+    usage_data = user_data.get("usage", {})
+    if usage_data.get("date") != today:
         print(f"   🔄 Resetting daily usage for new day")
-        user_data["usage"] = {"count": 0, "date": today}
-        user_ref.update({"usage": user_data["usage"]})
+        usage_data = {"count": 0, "date": today, "rewarded_count": 0}
+        user_ref.update({"usage": usage_data})
     
-    current_usage = user_data.get("usage", {}).get("count", 0)
-    limit = PLAN_LIMITS.get(plan, 0)
+    current_usage = usage_data.get("count", 0)
+    rewarded_count = usage_data.get("rewarded_count", 0) # Ödüllü hakları al
     
-    print(f"   📊 Usage check: {current_usage}/{limit if limit != float('inf') else 'unlimited'}")
+    # Premium plan kontrolü
+    if plan == "premium":
+        print(f"   ✅ Premium user, usage check passed.")
+        return {"user_id": user_id, "gender": user_data.get("gender", "unisex"), "plan": plan}
+
+    # Free plan için limit kontrolü
+    daily_limit = PLAN_LIMITS.get(plan, 2)
+    effective_limit = daily_limit + rewarded_count # Efektif limit = Normal limit + Ödül
+
+    print(f"   📊 Usage check: {current_usage}/{effective_limit} (Limit: {daily_limit}, Rewarded: {rewarded_count})")
     
-    if plan != "premium" and current_usage >= limit:
+    if current_usage >= effective_limit:
         print(f"   ❌ Usage limit exceeded")
         raise HTTPException(
             status_code=429, 
-            detail=f"Daily limit of {limit} requests reached for {plan.capitalize()} plan."
+            detail=f"Daily limit of {effective_limit} requests reached for {plan.capitalize()} plan."
         )
     
     print(f"   ✅ Usage check passed")
