@@ -286,32 +286,34 @@ class SmartOutfitEngine:
         return prompt
     
     def _create_free_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
-        """Free plan minimal prompt"""
+        """Free plan minimal prompt - Geliştirilmiş talimatlarla"""
         print(f"   🔸 Creating FREE plan prompt")
         
         return f"""Create {gender} outfit for {request.occasion}, {request.weather_condition} weather.
 Language: {request.language}
-
 Items: {wardrobe}
 {recent}
 
-CRITICAL: Use EXACT category names from items above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
-Required: 1 top + 1 bottom + 1 footwear item.
+CRITICAL RULES:
+1. For each item in the JSON response, you MUST use the exact 'id', 'name', and 'category' from the provided 'Items' list. Do not invent or change them.
+2. When choosing an item for a slot (e.g., 'bottoms'), you MUST pick an ID from the corresponding group in the 'Items' list (e.g., from `bottoms[...]`). Do not mix IDs from different groups.
+3. The final outfit must be logical: (1 top + 1 bottom + 1 footwear) OR (1 dress + 1 footwear).
 
 JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_above"}}],"description":"","suggestion_tip":""}}"""
     
     def _create_premium_prompt(self, request: OutfitRequest, gender: str, wardrobe: str, recent: str) -> str:
-        """Premium plan enhanced prompt"""
+        """Premium plan enhanced prompt - Geliştirilmiş talimatlarla"""
         print(f"   💎 Creating PREMIUM plan prompt")
         
         return f"""Expert {gender} styling: {request.occasion}, {request.weather_condition}.
 Language: {request.language}
-
 Wardrobe: {wardrobe}
 {recent}
 
-CRITICAL: Use EXACT category names from wardrobe above (t-shirt, jeans, sneakers, etc.) NOT generic names (tops, bottoms, footwear).
-Required: 1 top + 1 bottom + 1 footwear + optional outerwear/accessories.
+CRITICAL RULES:
+1. For each item in the JSON response, you MUST use the exact 'id', 'name', and 'category' from the provided 'Wardrobe' list. Do not invent or change them.
+2. When choosing an item for a slot (e.g., 'bottoms'), you MUST pick an ID from the corresponding group in the 'Wardrobe' list (e.g., from `bottoms[...]`). Do not mix IDs from different groups.
+3. The final outfit must be logical: (1 top + 1 bottom + 1 footwear) OR (1 dress + 1 footwear) + optional outerwear/accessories.
 
 JSON: {{"items":[{{"id":"","name":"","category":"exact_category_from_wardrobe"}}],"description":"","suggestion_tip":"","pinterest_links":[{{"title":"","url":""}}]}}"""
 
