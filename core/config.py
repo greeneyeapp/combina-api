@@ -3,15 +3,16 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     OPENWEATHER_API_KEY: str
     OPENAI_API_KEY: str
+    OPENAI_API_KEY2: str  # İkinci GPT API anahtarı
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     GOOGLE_APPLICATION_CREDENTIALS: str
     
-    # Yeni OAuth ayarları
+    # OAuth ayarları
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    APPLE_CLIENT_ID: str = ""  # Bundle ID
+    APPLE_CLIENT_ID: str = ""
     APPLE_TEAM_ID: str = ""
     APPLE_KEY_ID: str = ""
 
