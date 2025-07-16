@@ -38,6 +38,44 @@ class ClothingItem(BaseModel):
     notes: Optional[str] = None
     createdAt: Optional[str] = None
     
+    # YENİ FIELD - Eksik olan field
+    isImageMissing: Optional[bool] = False  # Default olarak False
+    
+    @validator('colors', pre=True, always=True)
+    def ensure_colors_from_color(cls, v, values):
+        """color field'ından colors array'ini oluştur"""
+        if v is None and 'color' in values and values['color']:
+            return [values['color']]
+        return v
+    
+    @validator('color', pre=True, always=True)
+    def ensure_color_from_colors(cls, v, values):
+        """colors array'inden color field'ını oluştur"""
+        if v is None and 'colors' in values and values['colors'] and len(values['colors']) > 0:
+            return values['colors'][0]
+        return v
+
+    class Config:
+        allow_population_by_field_name = True
+        fields = {
+            'createdAt': 'createdAt',
+            'subcategory': 'subcategory',
+            'isImageMissing': 'isImageMissing'
+        }
+    id: str
+    name: str
+    category: str
+    subcategory: Optional[str] = None
+    
+    # ÇOK ÖNEMLİ: Hem eski hem yeni format desteği
+    color: Optional[str] = None  # Backward compatibility için
+    colors: Optional[List[str]] = None  # Yeni çoklu renk desteği
+    
+    season: List[str]
+    style: Union[str, List[str]]  # String veya array desteği
+    notes: Optional[str] = None
+    createdAt: Optional[str] = None
+    
     @validator('colors', pre=True, always=True)
     def ensure_colors_from_color(cls, v, values):
         """color field'ından colors array'ini oluştur"""

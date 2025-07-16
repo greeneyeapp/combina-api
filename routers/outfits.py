@@ -1,4 +1,3 @@
-# routers/outfits.py - Tamamen Yeniden Yazılmış
 from fastapi import APIRouter, Depends, HTTPException
 from openai import OpenAI
 import json
@@ -213,10 +212,12 @@ class AdvancedOutfitEngine:
     
     def smart_wardrobe_selection(self, wardrobe: List[ClothingItem], context: dict, limit: int) -> List[ClothingItem]:
         """Akıllı gardrop seçimi"""
-        # Her item için skor hesapla
+        # Her item için skor hesapla - isImageMissing field'ını kontrol et
         scored_items = []
         for item in wardrobe:
-            if not item.isImageMissing:  # Resmi olan item'lar
+            # isImageMissing field'ı varsa kontrol et, yoksa True kabul et
+            has_image = not getattr(item, 'isImageMissing', False)
+            if has_image:  # Sadece resmi olan item'ları al
                 score = self.calculate_item_score(item, context)
                 scored_items.append((item, score))
         
@@ -393,7 +394,7 @@ Response format:
             item for item in wardrobe 
             if (self.get_category_type(item.category) == target_category and 
                 item.id not in exclude_ids and 
-                not item.isImageMissing)
+                not getattr(item, 'isImageMissing', False))  # Safe attribute access
         ]
         return random.choice(candidates) if candidates else None
 
