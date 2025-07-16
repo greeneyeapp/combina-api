@@ -21,7 +21,7 @@ primary_client = OpenAI(api_key=settings.OPENAI_API_KEY)
 secondary_client = OpenAI(api_key=settings.OPENAI_API_KEY2)
 
 db = firestore.client()
-PLAN_LIMITS = {"free": 2, "premium": float('inf')}
+PLAN_LIMITS = {"free": 2, "premium": None}
 
 class GPTLoadBalancer:
     """GPT API yük dengeleyici - trafik ve hata durumlarına göre client seçer"""

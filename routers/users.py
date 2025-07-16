@@ -83,7 +83,9 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         user_ref.update({"usage": usage_data})
     
     plan = user_data.get("plan", "free")
-    plan_limits = {"free": 2, "premium": float('inf')}
+    
+    # FIX: float('inf') yerine None kullan
+    plan_limits = {"free": 2, "premium": None}  # None = unlimited
     daily_limit = plan_limits.get(plan, 2)
     
     # Değerleri her zaman güncel olan `usage_data` objesinden oku
@@ -91,10 +93,14 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
     rewarded_count = usage_data.get("rewarded_count", 0)
     
     # Toplam kullanılabilir hakkı hesapla
-    effective_limit = daily_limit + rewarded_count if plan != "premium" else float('inf')
-
-    remaining = max(0, effective_limit - current_usage) if plan != "premium" else float('inf')
-    percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 and plan != "premium" else 0
+    if plan == "premium":
+        effective_limit = None  # Unlimited
+        remaining = "unlimited"
+        percentage_used = 0
+    else:
+        effective_limit = daily_limit + rewarded_count
+        remaining = max(0, effective_limit - current_usage)
+        percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
     
     return {
         "user_id": user_id,
@@ -103,7 +109,7 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         "age": user_data.get("age"),
         "plan": plan,
         "usage": {
-            "daily_limit": daily_limit,
+            "daily_limit": "unlimited" if daily_limit is None else daily_limit,
             "rewarded_count": rewarded_count,
             "current_usage": current_usage,
             "remaining": remaining,
