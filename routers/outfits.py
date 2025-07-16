@@ -539,8 +539,18 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
             'recent_items': recent_items
         }
         
-        # Plan bazlı limit
-        wardrobe_limit = 250 if plan == "premium" else 150
+        # Plan bazlı akıllı limit - Token optimizasyonu ile
+        if plan == "premium":
+            # Premium: maksimum 200 item (optimal performans için)
+            wardrobe_limit = min(200, len(request.wardrobe))
+        else:
+            # Free için akıllı limit: maksimum 75 item olabilir
+            wardrobe_limit = min(75, len(request.wardrobe))
+        
+        # Eğer wardrobe çok büyükse kullanıcıyı bilgilendir
+        if len(request.wardrobe) > wardrobe_limit:
+            print(f"📊 Wardrobe optimized: {len(request.wardrobe)} → {wardrobe_limit} items for {plan} user")
+        
         selected_wardrobe = outfit_engine.smart_wardrobe_selection(
             request.wardrobe, context, wardrobe_limit
         )
