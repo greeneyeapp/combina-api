@@ -303,7 +303,7 @@ OUTFIT REQUIREMENTS:
 - Ensure color harmony and style consistency
 
 RECENT OUTFIT CONTEXT:
-Recently used items (try to avoid): {', '.join(list({{item for outfit in request.last_5_outfits for item in outfit.items}})[:15])}
+Recently used items (try to avoid): {', '.join([item for outfit in request.last_5_outfits for item in outfit.items][:15])}
 
 CRITICAL ID USAGE RULE:
 You MUST use EXACT item IDs from the database below. Do NOT modify, shorten, or create new IDs.
