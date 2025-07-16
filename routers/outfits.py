@@ -255,7 +255,34 @@ class AdvancedOutfitEngine:
         if request.plan == 'premium':
             pinterest_section = ',"pinterest_links":[{"title":"Style inspiration title","url":"https://pinterest.com/..."}]'
         
+        # Dil mapping sistemi
+        language_names = {
+            'ar': 'العربية (Arabic)',
+            'bg': 'Български (Bulgarian)', 
+            'de': 'Deutsch (German)',
+            'el': 'Ελληνικά (Greek)',
+            'en': 'English',
+            'es': 'Español (Spanish)',
+            'fr': 'Français (French)',
+            'he': 'עברית (Hebrew)',
+            'hi': 'हिन्दी (Hindi)',
+            'it': 'Italiano (Italian)',
+            'ja': '日本語 (Japanese)',
+            'ko': '한국어 (Korean)',
+            'pt': 'Português (Portuguese)',
+            'ru': 'Русский (Russian)',
+            'th': 'ไทย (Thai)',
+            'tr': 'Türkçe (Turkish)',
+            'zh': '中文 (Chinese)'
+        }
+        
+        target_language = language_names.get(request.language, 'English')
+        
         prompt = f"""You are an expert fashion stylist. Create a complete {gender} outfit for the occasion '{request.occasion}' in {request.weather_condition} weather.
+
+CRITICAL LANGUAGE REQUIREMENT: 
+You MUST write the "description" and "suggestion_tip" fields in {target_language} language. 
+Do NOT use English if the target language is different.
 
 STYLING OBJECTIVES:
 1. Create a coherent, weather-appropriate outfit
@@ -276,37 +303,43 @@ OUTFIT REQUIREMENTS:
 - Ensure color harmony and style consistency
 
 RECENT OUTFIT CONTEXT:
-Recently used items (try to avoid): {', '.join(list({item for outfit in request.last_5_outfits for item in outfit.items})[:15])}
+Recently used items (try to avoid): {', '.join(list({{item for outfit in request.last_5_outfits for item in outfit.items}})[:15])}
+
+CRITICAL ID USAGE RULE:
+You MUST use EXACT item IDs from the database below. Do NOT modify, shorten, or create new IDs.
 
 ITEM DATABASE:
 {self.create_compact_wardrobe_string(request.wardrobe)}
 
 RESPONSE RULES:
-1. Use ONLY item IDs from the provided database
-2. Create creative names and descriptions for the outfit
-3. Provide practical styling advice
-4. Respond in {request.language}
+1. Use ONLY exact item IDs from the database above (copy-paste the full ID)
+2. Create creative names and descriptions for the outfit pieces
+3. Use the actual category from the database for each item
+4. Write "description" and "suggestion_tip" in {target_language} language ONLY
+5. Provide practical styling advice
 
 Response format:
 {{
-    "items": [{{"id": "exact_item_id", "name": "creative_description", "category": "item_category"}}],
-    "description": "Complete outfit description explaining the look and feel",
-    "suggestion_tip": "Practical styling advice for wearing this outfit"
+    "items": [{{"id": "exact_item_id_from_database", "name": "creative_description", "category": "actual_category_from_database"}}],
+    "description": "Complete outfit description in {target_language} explaining the look and feel",
+    "suggestion_tip": "Practical styling advice in {target_language} for wearing this outfit"
     {pinterest_section}
-}}"""
+}}
+
+LANGUAGE REMINDER: description = {target_language}, suggestion_tip = {target_language}"""
         
         return prompt
     
     def create_compact_wardrobe_string(self, wardrobe: List[ClothingItem]) -> str:
-        """Kompakt gardrop listesi oluştur"""
+        """Kompakt gardrop listesi oluştur - ID'leri vurgulu"""
         groups = defaultdict(list)
         for item in wardrobe:
             cat_type = self.get_category_type(item.category)
             colors = item.colors or [item.color] if item.color else ['neutral']
             color_str = ','.join(colors[:2])  # İlk 2 renk
-            groups[cat_type].append(f"{item.id}:{item.name}({color_str})")
+            groups[cat_type].append(f"ID:{item.id}|{item.name}|({color_str})")
         
-        return " | ".join([f"{cat}[{','.join(items)}]" for cat, items in groups.items()])
+        return " || ".join([f"{cat}_ITEMS[{' | '.join(items)}]" for cat, items in groups.items()])
     
     def analyze_wardrobe(self, wardrobe: List[ClothingItem]) -> dict:
         """Gardrop analizi"""
@@ -347,21 +380,31 @@ Response format:
         
         valid_items = []
         category_types = set()
+        invalid_ids = []
         
-        # Geçerli item'ları filtrele
+        # Önce geçerli item'ları filtrele ve hatalı ID'leri tespit et
         for item_dict in suggested_items:
-            if item_dict['id'] in wardrobe_map:
-                wardrobe_item = wardrobe_map[item_dict['id']]
+            item_id = item_dict.get('id')
+            if item_id in wardrobe_map:
+                wardrobe_item = wardrobe_map[item_id]
                 cat_type = self.get_category_type(wardrobe_item.category)
                 
                 # Aynı kategoriden birden fazla item'ı engelle (accessories hariç)
                 if cat_type not in category_types or cat_type == 'accessories':
                     valid_items.append({
                         'id': wardrobe_item.id,
-                        'name': wardrobe_item.name,
-                        'category': wardrobe_item.category
+                        'name': wardrobe_item.name,  # Gerçek name kullan
+                        'category': wardrobe_item.category  # Gerçek category kullan
                     })
                     category_types.add(cat_type)
+            else:
+                invalid_ids.append(item_id)
+                print(f"⚠️ Invalid ID detected: {item_id}")
+        
+        # Hatalı ID'ler varsa log'la
+        if invalid_ids:
+            print(f"❌ GPT used invalid IDs: {invalid_ids}")
+            print(f"Available IDs: {list(wardrobe_map.keys())[:10]}...")  # İlk 10 ID'yi göster
         
         # Temel kombin kontrolü
         has_dress = 'dresses' in category_types
@@ -371,21 +414,30 @@ Response format:
         
         # Eksik parçaları tamamla
         if not has_footwear:
+            print("🔍 Looking for footwear...")
             shoe = self.find_suitable_item(wardrobe, 'footwear', exclude_ids={item['id'] for item in valid_items})
             if shoe:
                 valid_items.append({'id': shoe.id, 'name': shoe.name, 'category': shoe.category})
+                print(f"✅ Added footwear: {shoe.name}")
+            else:
+                print("⚠️ No suitable footwear found")
         
         if not has_dress and (not has_top or not has_bottom):
             if not has_top:
+                print("🔍 Looking for top...")
                 top = self.find_suitable_item(wardrobe, 'tops', exclude_ids={item['id'] for item in valid_items})
                 if top:
                     valid_items.append({'id': top.id, 'name': top.name, 'category': top.category})
+                    print(f"✅ Added top: {top.name}")
             
             if not has_bottom:
+                print("🔍 Looking for bottom...")
                 bottom = self.find_suitable_item(wardrobe, 'bottoms', exclude_ids={item['id'] for item in valid_items})
                 if bottom:
                     valid_items.append({'id': bottom.id, 'name': bottom.name, 'category': bottom.category})
+                    print(f"✅ Added bottom: {bottom.name}")
         
+        print(f"🎯 Final outfit: {len(valid_items)} items with categories: {[self.get_category_type(item['category']) for item in valid_items]}")
         return valid_items[:6]  # Maksimum 6 parça
     
     def find_suitable_item(self, wardrobe: List[ClothingItem], target_category: str, exclude_ids: Set[str]) -> Optional[ClothingItem]:
