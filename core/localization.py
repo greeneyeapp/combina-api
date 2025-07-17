@@ -7,6 +7,27 @@ Yeni bir dil eklemek için, 'TRANSLATIONS' sözlüğüne yeni bir anahtar
 """
 import json
 
+LANGUAGE_NAMES = {
+    'ar': 'Arabic',
+    'bg': 'Bulgarian',
+    'de': 'German',
+    'el': 'Greek',
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'he': 'Hebrew',
+    'hi': 'Hindi',
+    'id': 'Indonesian',
+    'it': 'Italian',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'pt': 'Portuguese',
+    'ru': 'Russian',
+    'th': 'Thai',
+    'tr': 'Turkish',
+    'zh': 'Chinese'
+}
+
 TRANSLATIONS = {
     "en": {
         "colors": {

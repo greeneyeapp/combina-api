@@ -3,10 +3,7 @@
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Union, Any, Dict
 
-# =================================================================
-# Temel ve Yetkilendirme Modelleri (Mevcut yapı korundu ve V2'ye uyarlandı)
-# =================================================================
-
+# Temel ve Yetkilendirme Modelleri
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -24,10 +21,7 @@ class UserInfoUpdate(BaseModel):
     gender: str
     birthDate: str
 
-# =================================================================
-# YENİ ve GÜNCELLENMİŞ MODELLER (Yeni Mimarimiz İçin)
-# =================================================================
-
+# YENİ MİMARİ İÇİN GÜNCELLENMİŞ MODELLER
 class OptimizedClothingItem(BaseModel):
     """Client tarafından filtrelenmiş, optimize kıyafet modeli."""
     id: str
@@ -60,7 +54,7 @@ class OutfitRequest(BaseModel):
     """/suggest-outfit endpoint'i için ana istek modeli."""
     language: str
     plan: str
-    gender: Optional[str] = None
+    gender: str
     wardrobe: List[OptimizedClothingItem]
     last_5_outfits: List[OptimizedOutfit]
     weather_condition: str
@@ -82,56 +76,32 @@ class OutfitResponse(BaseModel):
     suggestion_tip: str
     pinterest_links: Optional[List[PinterestLink]] = None
 
-# =================================================================
-# MEVCUT (ESKİ) YAPI - Gerekliyse Tutulabilir
-# =================================================================
-
+# Mevcut diğer modeller (Pydantic V2 uyarıları giderildi)
 class ClothingItem(BaseModel):
-    """Eski, detaylı kıyafet modeli."""
-    id: str
-    name: str
-    category: str
-    subcategory: Optional[str] = None
-    color: Optional[str] = None
-    colors: Optional[List[str]] = None
-    season: List[str]
-    style: Union[str, List[str]]
-    notes: Optional[str] = None
-    createdAt: Optional[str] = None
-    isImageMissing: Optional[bool] = False
+    """Eski, detaylı kıyafet modeli (başka bir yerde kullanılıyorsa)."""
+    id: str; name: str; category: str; subcategory: Optional[str] = None
+    color: Optional[str] = None; colors: Optional[List[str]] = None
+    season: List[str]; style: Union[str, List[str]]; notes: Optional[str] = None
+    createdAt: Optional[str] = None; isImageMissing: Optional[bool] = False
 
     @validator('colors', pre=True, always=True)
     def ensure_colors_from_color(cls, v, values):
-        if v is None and 'color' in values and values['color']:
-            return [values['color']]
+        if v is None and 'color' in values and values['color']: return [values['color']]
         return v
     
     @validator('color', pre=True, always=True)
     def ensure_color_from_colors(cls, v, values):
-        if v is None and 'colors' in values and values['colors']:
-            return values['colors'][0]
+        if v is None and 'colors' in values and values['colors']: return values['colors'][0]
         return v
 
-    class Config:
-        populate_by_name = True
-
-# =================================================================
-# Diğer Mevcut Modeller (Değişiklik Gerekmiyor, sadece Config düzeltildi)
-# =================================================================
+    class Config: populate_by_name = True
 
 class ProfileInit(BaseModel):
-    gender: str
-    fullname: str
-    birthDate: Optional[str] = None
+    gender: str; fullname: str; birthDate: Optional[str] = None
 
 class UsageStatusResponse(BaseModel):
-    plan: str
-    current_usage: int
-    daily_limit: Union[int, str]
-    remaining: Union[int, str]
-    is_unlimited: bool
-    date: str
-    percentage_used: Optional[float] = None
+    plan: str; current_usage: int; daily_limit: Union[int, str]; remaining: Union[int, str]
+    is_unlimited: bool; date: str; percentage_used: Optional[float] = None
 
 class PlanUpdateRequest(BaseModel):
     plan: str = Field(..., description="New plan (free, premium)")
