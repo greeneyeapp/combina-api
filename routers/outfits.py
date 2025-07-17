@@ -26,7 +26,6 @@ db = firestore.client()
 PLAN_LIMITS = {"free": 2, "premium": None}
 
 class GPTLoadBalancer:
-    # ... (Bu sınıfın tam kodu önceki cevapta olduğu gibi, değişmeden kalabilir)
     def __init__(self): self.primary_failures, self.secondary_failures, self.last_primary_use, self.last_secondary_use, self.max_failures, self.failure_reset_time = 0, 0, 0, 0, 3, 300
     def get_available_client(self):
         current_time = time.time();
@@ -45,34 +44,34 @@ class GPTLoadBalancer:
 gpt_balancer = GPTLoadBalancer()
 
 class AdvancedOutfitEngine:
-    """
-    NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler.
-    """
+    """YENİDEN YAPILANDIRILDI: AI prompt yönetimi ve çeviri mantığını içerir."""
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
 
     def create_advanced_prompt(self, request: OutfitRequest) -> str:
-        """
-        NİHAİ PROMPT: Token açısından verimli, küçük ve çeviri kılavuzu İÇERMEYEN prompt.
-        """
+        """AI'a tam ve doğru çeviri yapması için GEREKLİ ve DİNAMİK bilgileri verir."""
         lang_code, gender = request.language, request.gender
-        target_language = localization.LANGUAGE_NAMES.get(lang_code, "English")
-        
-        # Occasion'ı AI'ın anlaması için her zaman İngilizce gönderiyoruz.
         en_occasions = localization.get_translation('en', 'occasions')
         occasion_text = en_occasions.get(request.occasion, request.occasion.replace('-', ' '))
+        
+        target_language, critical_translation_rules = self._get_language_specific_instructions(lang_code)
 
         pinterest_instructions = ""
         if request.plan == "premium":
+            # YENİ: 3'lü Pinterest link yapısı için güncellenmiş talimatlar
             pinterest_instructions = f''',"pinterest_links": [
             {{
-                "title": "A specific title in {target_language} about the chosen items",
-                "search_query": "A search query in English. MUST include the gender '{gender}', main item categories, and colors. Example: '{gender} blue t-shirt white linen trousers outfit'"
+                "title": "A specific title in {target_language} about the exact outfit combo",
+                "search_query": "A search query in English for the exact outfit. MUST include gender '{gender}', main item categories, and colors. Example: '{gender} blue t-shirt white linen trousers outfit'"
             }},
             {{
-                "title": "A general style title in {target_language} for the occasion",
-                "search_query": "A general style search query in English. MUST include the gender '{gender}'. Example: '{gender} summer smart casual style'"
+                "title": "A title in {target_language} on how to style ONE KEY ITEM",
+                "search_query": "A search query in English on how to style ONE KEY ITEM from the outfit (e.g., the trousers, a jacket). MUST include gender '{gender}'. Example: 'how to style white linen trousers for {gender}'"
+            }},
+            {{
+                "title": "A general style inspiration title in {target_language} for the occasion",
+                "search_query": "A general style search query in English for the occasion and season. MUST include gender '{gender}'. Example: '{gender} summer daily errands style'"
             }}
         ]'''
 
@@ -80,17 +79,17 @@ class AdvancedOutfitEngine:
 You are an expert fashion stylist. Create a complete {gender} outfit for the occasion: '{occasion_text}'. The weather is {request.weather_condition}.
 
 CRITICAL LANGUAGE REQUIREMENT:
-- You MUST write all descriptive fields ("description", "suggestion_tip", and "title" for Pinterest) in {target_language}.
-- Do NOT use English if the target language is different.
+You MUST write all descriptive fields ("description", "suggestion_tip", and "title" for Pinterest) in {target_language}.
+{critical_translation_rules}
 
 CONTEXT:
-- Wardrobe: You are provided with {request.context.filtered_wardrobe_size} pre-filtered items.
+- Wardrobe: You are provided with {request.context.filtered_wardrobe_size} pre-filtered items from a total of {request.context.total_wardrobe_size}.
 - Recent Outfits (Avoid these item IDs): {', '.join([item for outfit in request.last_5_outfits for item in outfit.items][:15]) if request.last_5_outfits else "None"}
 
 REQUIREMENTS:
 - Use ONLY the exact item IDs from the database below.
 - Keep "description" and "suggestion_tip" concise (1-2 sentences).
-- For premium users, provide exactly two different Pinterest link ideas as specified.
+- For premium users, provide exactly THREE different Pinterest link ideas as specified in the JSON structure.
 
 ITEM DATABASE:
 {self.create_compact_wardrobe_string(request.wardrobe)}
@@ -105,42 +104,39 @@ JSON RESPONSE STRUCTURE:
 """
         return prompt
 
+    def _get_language_specific_instructions(self, lang_code: str) -> (str, str):
+        """Dil koduna göre dil adını ve çeviri talimatlarını döndürür."""
+        if lang_code == 'en': return "English", ""
+        target_language_name = localization.LANGUAGE_NAMES.get(lang_code, lang_code.capitalize())
+        translations = localization.TRANSLATIONS.get(lang_code, localization.TRANSLATIONS['en'])
+        
+        color_guide_str = json.dumps(translations.get('colors', {}), ensure_ascii=False)
+        category_guide_str = json.dumps(translations.get('categories', {}), ensure_ascii=False)
+        
+        return target_language_name, f"""
+CRITICAL TRANSLATION RULES FOR {target_language_name.upper()}:
+- When you mention a color or category, you MUST use the exact {target_language_name} translation from the guides below.
+
+{target_language_name.upper()} COLOR GUIDE: {color_guide_str}
+{target_language_name.upper()} CATEGORY GUIDE: {category_guide_str}
+"""
+
     def validate_outfit_structure(self, items_from_ai: List[Dict[str, str]], wardrobe: List[OptimizedClothingItem]) -> List[SuggestedItem]:
-        """AI'dan gelen item listesini doğrular ve şemaya uygun hale getirir."""
         if not items_from_ai or not isinstance(items_from_ai, list): return []
         wardrobe_map = {item.id: item for item in wardrobe}
         return [SuggestedItem(**item) for item in items_from_ai if isinstance(item, dict) and item.get("id") in wardrobe_map]
 
-    def standardize_terminology(self, text: str, lang_code: str) -> str:
-        """
-        NİHAİ ÇÖZÜM: AI'dan gelen çevrilmiş metindeki terminolojiyi standartlaştırır.
-        """
-        if lang_code == 'en' or not text: return text
-        
-        # Bu fonksiyon, AI'ın "açık mavi" gibi genel terimlerini, bizim "Buz Mavisi"
-        # gibi standart terimlerimizle değiştirmek için bir "bul ve değiştir" mekanizması
-        # olarak tasarlanabilir. Şimdilik, bu işlevsellik olmadan devam ediyoruz,
-        # çünkü AI'ın doğrudan doğru dili kullanmasını bekliyoruz.
-        # İhtiyaç halinde burası doldurulabilir.
-        return text
-
     def translate_pinterest_query(self, query: str, lang_code: str) -> str:
-        """Sadece Pinterest sorgusunu İngilizce'den hedef dile çevirir."""
         if lang_code == 'en' or not query: return query
         translations = localization.TRANSLATIONS.get(lang_code, localization.TRANSLATIONS['en'])
         all_keywords = {**translations.get('colors', {}), **translations.get('categories', {})}
-        # Daha uzun anahtarların önce değiştirilmesi için sırala
         sorted_keywords = sorted(all_keywords.keys(), key=len, reverse=True)
-        for key in sorted_keywords:
-            query = query.replace(key, all_keywords[key])
+        for key in sorted_keywords: query = query.replace(key, all_keywords[key])
         return query
-
 
 outfit_engine = AdvancedOutfitEngine()
 
 async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_id)):
-    """Kullanım kontrolü ve kullanıcı verisi. Bu yapı korunmuştur."""
-    # ... (Bu fonksiyonun tam kodu önceki cevapta olduğu gibi, değişmeden kalabilir)
     today = str(date.today()); user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get();
     if not user_doc.exists: raise HTTPException(status_code=404, detail="User profile not found.")
@@ -154,9 +150,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     return {"user_id": user_id, "gender": user_data.get("gender", "male"), "plan": plan}
 
 async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> str:
-    """GPT API'yi retry logic ile çağırır. Bu yapı korunmuştur."""
-    # ... (Bu fonksiyonun tam kodu önceki cevapta olduğu gibi, değişmeden kalabilir)
-    config = {"free": {"max_tokens": 800, "temperature": 0.75}, "premium": {"max_tokens": 1200, "temperature": 0.75}}
+    config = {"free": {"max_tokens": 800, "temperature": 0.75}, "premium": {"max_tokens": 1500, "temperature": 0.75}}
     gpt_config = config.get(plan, config["free"])
     for attempt in range(max_retries + 1):
         client, client_type = gpt_balancer.get_available_client()
@@ -174,27 +168,15 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
-    """NİHAİ YAPI: Verimli prompt oluşturur, AI'dan gelen yanıtı işler."""
     try:
         if not request.wardrobe: raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
-        
         prompt = outfit_engine.create_advanced_prompt(request)
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
-        
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
         if not final_items: raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
         
-        # AI'dan gelen ve zaten doğru dilde olan metinleri al
-        description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
-        suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
-        
-        response_data = {
-            "items": final_items,
-            "description": description,
-            "suggestion_tip": suggestion_tip,
-            "pinterest_links": []
-        }
+        response_data = {"items": final_items, "description": ai_response.get("description", ""), "suggestion_tip": ai_response.get("suggestion_tip", ""), "pinterest_links": []}
         
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
             final_pinterest_links = []
@@ -214,18 +196,14 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
     except Exception as e:
         print(f"❌ Outfit suggestion error: {traceback.format_exc()}"); raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
 
-
 @router.get("/usage-status", tags=["users"])
 async def get_usage_status(user_id: str = Depends(get_current_user_id)):
-    """Kullanıcının günlük kullanım durumunu döndürür."""
-    # ... (Bu fonksiyonun tam kodu önceki cevapta olduğu gibi, değişmeden kalabilir)
     try:
         user_ref = db.collection('users').document(user_id)
-        user_doc = user_ref.get()
+        user_doc = user_ref.get();
         if not user_doc.exists: raise HTTPException(status_code=404, detail="User not found")
         user_data, plan, today = user_doc.to_dict(), user_data.get("plan", "free"), str(date.today())
-        usage_data = user_data.get("usage", {})
-        current_usage = usage_data.get("count", 0) if usage_data.get("date") == today else 0
+        usage_data = user_data.get("usage", {}); current_usage = usage_data.get("count", 0) if usage_data.get("date") == today else 0
         rewarded_count = usage_data.get("rewarded_count", 0) if usage_data.get("date") == today else 0
         daily_limit = PLAN_LIMITS.get(plan)
         is_unlimited = plan == 'premium'
@@ -236,9 +214,6 @@ async def get_usage_status(user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         print(f"Error getting usage status: {str(e)}"); raise HTTPException(status_code=500, detail="Failed to get usage status")
 
-
 @router.get("/gpt-status", tags=["dev"])
 async def get_gpt_status(user_id: str = Depends(get_current_user_id)):
-    """Geliştirme için GPT API'lerinin sağlık durumunu döndürür."""
-    # ... (Bu fonksiyonun tam kodu önceki cevapta olduğu gibi, değişmeden kalabilir)
     return {"primary_failures": gpt_balancer.primary_failures, "secondary_failures": gpt_balancer.secondary_failures, "max_failures": gpt_balancer.max_failures, "status": "healthy" if (gpt_balancer.primary_failures < gpt_balancer.max_failures or gpt_balancer.secondary_failures < gpt_balancer.max_failures) else "degraded"}
