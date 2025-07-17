@@ -44,22 +44,21 @@ class GPTLoadBalancer:
 gpt_balancer = GPTLoadBalancer()
 
 class AdvancedOutfitEngine:
-    """YENİDEN YAPILANDIRILDI: AI prompt yönetimi ve çeviri mantığını içerir."""
+    """NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
 
     def create_advanced_prompt(self, request: OutfitRequest) -> str:
-        """AI'a tam ve doğru çeviri yapması için GEREKLİ ve DİNAMİK bilgileri verir."""
+        """NİHAİ PROMPT: Token açısından verimli, 3'lü Pinterest linki talimatı içeren prompt."""
         lang_code, gender = request.language, request.gender
+        target_language = localization.LANGUAGE_NAMES.get(lang_code, "English")
         en_occasions = localization.get_translation('en', 'occasions')
         occasion_text = en_occasions.get(request.occasion, request.occasion.replace('-', ' '))
-        
-        target_language, critical_translation_rules = self._get_language_specific_instructions(lang_code)
 
         pinterest_instructions = ""
         if request.plan == "premium":
-            # YENİ: 3'lü Pinterest link yapısı için güncellenmiş talimatlar
+            # GÜNCELLENDİ: 3 farklı ve akıllı Pinterest linki için talimatlar
             pinterest_instructions = f''',"pinterest_links": [
             {{
                 "title": "A specific title in {target_language} about the exact outfit combo",
@@ -79,17 +78,17 @@ class AdvancedOutfitEngine:
 You are an expert fashion stylist. Create a complete {gender} outfit for the occasion: '{occasion_text}'. The weather is {request.weather_condition}.
 
 CRITICAL LANGUAGE REQUIREMENT:
-You MUST write all descriptive fields ("description", "suggestion_tip", and "title" for Pinterest) in {target_language}.
-{critical_translation_rules}
+- You MUST write all descriptive fields ("description", "suggestion_tip", and "title" for Pinterest) in {target_language}.
+- Do NOT use English if the target language is different.
 
 CONTEXT:
-- Wardrobe: You are provided with {request.context.filtered_wardrobe_size} pre-filtered items from a total of {request.context.total_wardrobe_size}.
+- Wardrobe: You are provided with {request.context.filtered_wardrobe_size} pre-filtered items.
 - Recent Outfits (Avoid these item IDs): {', '.join([item for outfit in request.last_5_outfits for item in outfit.items][:15]) if request.last_5_outfits else "None"}
 
 REQUIREMENTS:
 - Use ONLY the exact item IDs from the database below.
 - Keep "description" and "suggestion_tip" concise (1-2 sentences).
-- For premium users, provide exactly THREE different Pinterest link ideas as specified in the JSON structure.
+- For premium users, provide exactly THREE different Pinterest link ideas as specified.
 
 ITEM DATABASE:
 {self.create_compact_wardrobe_string(request.wardrobe)}
@@ -104,34 +103,24 @@ JSON RESPONSE STRUCTURE:
 """
         return prompt
 
-    def _get_language_specific_instructions(self, lang_code: str) -> (str, str):
-        """Dil koduna göre dil adını ve çeviri talimatlarını döndürür."""
-        if lang_code == 'en': return "English", ""
-        target_language_name = localization.LANGUAGE_NAMES.get(lang_code, lang_code.capitalize())
-        translations = localization.TRANSLATIONS.get(lang_code, localization.TRANSLATIONS['en'])
-        
-        color_guide_str = json.dumps(translations.get('colors', {}), ensure_ascii=False)
-        category_guide_str = json.dumps(translations.get('categories', {}), ensure_ascii=False)
-        
-        return target_language_name, f"""
-CRITICAL TRANSLATION RULES FOR {target_language_name.upper()}:
-- When you mention a color or category, you MUST use the exact {target_language_name} translation from the guides below.
-
-{target_language_name.upper()} COLOR GUIDE: {color_guide_str}
-{target_language_name.upper()} CATEGORY GUIDE: {category_guide_str}
-"""
-
     def validate_outfit_structure(self, items_from_ai: List[Dict[str, str]], wardrobe: List[OptimizedClothingItem]) -> List[SuggestedItem]:
         if not items_from_ai or not isinstance(items_from_ai, list): return []
         wardrobe_map = {item.id: item for item in wardrobe}
         return [SuggestedItem(**item) for item in items_from_ai if isinstance(item, dict) and item.get("id") in wardrobe_map]
+
+    def standardize_terminology(self, text: str, lang_code: str) -> str:
+        # Bu fonksiyon, AI'dan gelen dildeki genel terimleri (örn: "açık mavi")
+        # bizim standartlarımıza (örn: "Buz Mavisi") çevirmek için kullanılabilir.
+        # Şimdilik, AI'ın doğrudan doğru dili kullandığını varsayıyoruz.
+        return text
 
     def translate_pinterest_query(self, query: str, lang_code: str) -> str:
         if lang_code == 'en' or not query: return query
         translations = localization.TRANSLATIONS.get(lang_code, localization.TRANSLATIONS['en'])
         all_keywords = {**translations.get('colors', {}), **translations.get('categories', {})}
         sorted_keywords = sorted(all_keywords.keys(), key=len, reverse=True)
-        for key in sorted_keywords: query = query.replace(key, all_keywords[key])
+        for key in sorted_keywords:
+            query = query.replace(key, all_keywords[key])
         return query
 
 outfit_engine = AdvancedOutfitEngine()
@@ -150,7 +139,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     return {"user_id": user_id, "gender": user_data.get("gender", "male"), "plan": plan}
 
 async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> str:
-    config = {"free": {"max_tokens": 800, "temperature": 0.75}, "premium": {"max_tokens": 1500, "temperature": 0.75}}
+    config = {"free": {"max_tokens": 800, "temperature": 0.75}, "premium": {"max_tokens": 1200, "temperature": 0.75}}
     gpt_config = config.get(plan, config["free"])
     for attempt in range(max_retries + 1):
         client, client_type = gpt_balancer.get_available_client()
@@ -176,7 +165,10 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
         if not final_items: raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
         
-        response_data = {"items": final_items, "description": ai_response.get("description", ""), "suggestion_tip": ai_response.get("suggestion_tip", ""), "pinterest_links": []}
+        description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
+        suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
+        
+        response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
         
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
             final_pinterest_links = []
