@@ -4,15 +4,12 @@ from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Union, Any, Dict
 
 # =================================================================
-# Temel ve Yetkilendirme Modelleri (Mevcut yapı korundu)
+# Temel ve Yetkilendirme Modelleri (Mevcut yapı korundu ve V2'ye uyarlandı)
 # =================================================================
 
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-class IdToken(BaseModel):
-    id_token: str
 
 class GoogleAuthRequest(BaseModel):
     access_token: str
@@ -32,10 +29,7 @@ class UserInfoUpdate(BaseModel):
 # =================================================================
 
 class OptimizedClothingItem(BaseModel):
-    """
-    YENİ: Client tarafından akıllıca filtrelendikten sonra gönderilen,
-    optimize edilmiş ve hafifletilmiş kıyafet modeli.
-    """
+    """Client tarafından filtrelenmiş, optimize kıyafet modeli."""
     id: str
     name: str
     category: str
@@ -44,20 +38,14 @@ class OptimizedClothingItem(BaseModel):
     style: List[str]
 
 class OptimizedOutfit(BaseModel):
-    """
-    YENİ: Tekrarları önlemek için gönderilen, son 5 kombinin
-    optimize edilmiş yapısı. outfits.py'deki `Outfit` ile aynı yapıya sahip.
-    """
+    """Optimize edilmiş son 5 kombin yapısı."""
     items: List[str]
     occasion: str
     weather: Optional[str] = None
     date: str
 
 class RequestContext(BaseModel):
-    """
-    GÜNCELLENDİ: API'nin isteği daha iyi analiz edebilmesi için
-    client'tan gönderilen meta veri.
-    """
+    """Client'tan gönderilen meta veri."""
     total_wardrobe_size: int
     filtered_wardrobe_size: int
     user_plan: str
@@ -69,37 +57,29 @@ class PinterestLink(BaseModel):
     url: str
 
 class OutfitRequest(BaseModel):
-    """
-    GÜNCELLENDİ: /suggest-outfit endpoint'i için ana istek modeli.
-    Artık optimize edilmiş modelleri kullanır.
-    """
-    language: str = Field(..., alias='language')
-    gender: Optional[str] = Field(None, alias='gender')
-    plan: str = Field(..., alias='plan')
-
-    # EN KRİTİK DEĞİŞİKLİK: Artık hafifletilmiş modelleri bekliyoruz.
-    wardrobe: List[OptimizedClothingItem] = Field(..., alias='wardrobe')
-    last_5_outfits: List[OptimizedOutfit] = Field(..., alias='last_5_outfits')
-    
-    weather_condition: str = Field(..., alias='weather_condition')
-    occasion: str = Field(..., alias='occasion')
-    context: RequestContext = Field(..., alias='context')  # Artık zorunlu ve tam
+    """/suggest-outfit endpoint'i için ana istek modeli."""
+    language: str
+    plan: str
+    gender: Optional[str] = None
+    wardrobe: List[OptimizedClothingItem]
+    last_5_outfits: List[OptimizedOutfit]
+    weather_condition: str
+    occasion: str
+    context: RequestContext
     
     class Config:
-        # Pydantic V2 için doğru yapılandırma
         populate_by_name = True
 
 class SuggestedItem(BaseModel):
     id: str
     name: str
     category: str
-    subcategory: Optional[str] = None
 
 class OutfitResponse(BaseModel):
-    """Yanıt modeli. Değişiklik gerekmiyor."""
+    """/suggest-outfit endpoint'i için son kullanıcıya dönen yanıt modeli."""
     items: List[SuggestedItem]
     description: str
-    suggestion_tip: Optional[str] = None
+    suggestion_tip: str
     pinterest_links: Optional[List[PinterestLink]] = None
 
 # =================================================================
@@ -107,10 +87,7 @@ class OutfitResponse(BaseModel):
 # =================================================================
 
 class ClothingItem(BaseModel):
-    """
-    Mevcut kodun başka bir yerinde hala kullanılıyorsa bu detaylı model tutulur.
-    Pydantic V2 uyarıları düzeltildi.
-    """
+    """Eski, detaylı kıyafet modeli."""
     id: str
     name: str
     category: str
@@ -136,11 +113,10 @@ class ClothingItem(BaseModel):
         return v
 
     class Config:
-        # Pydantic V2 için doğru yapılandırma
         populate_by_name = True
 
 # =================================================================
-# Diğer Mevcut Modeller (Değişiklik Gerekmiyor)
+# Diğer Mevcut Modeller (Değişiklik Gerekmiyor, sadece Config düzeltildi)
 # =================================================================
 
 class ProfileInit(BaseModel):

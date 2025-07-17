@@ -1,34 +1,30 @@
-# kodlar/localization.py
+# core/localization.py
 
 """
 Uygulama genelindeki tüm metin anahtarlarının dil çevirilerini içerir.
 Yeni bir dil eklemek için, 'TRANSLATIONS' sözlüğüne yeni bir anahtar 
 (örn: 'de' Almanca için) ve ilgili çeviri sözlüklerini ekleyin.
 """
+import json
 
 TRANSLATIONS = {
     "en": {
         "colors": {
-            "white": "White", "gray": "Gray", "fume": "Charcoal", "black": "Black",
-            "cream": "Cream", "beige": "Beige", "tan": "Tan", "cinnamon": "Cinnamon",
-            "earth": "Earth", "chestnut": "Chestnut", "plum": "Plum", "khaki": "Khaki",
-            "lemon": "Lemon", "yellow": "Yellow", "gold": "Gold", "mustard": "Mustard",
-            "peach": "Peach", "apricot": "Apricot", "salmon": "Salmon", "orange": "Orange",
-            "dusty-pink": "Dusty Rose", "coral": "Coral", "pomegranate-red": "Pomegranate",
-            "red": "Red", "cherry-red": "Cherry", "dark-red": "Burgundy", "pink": "Pink",
-            "fuchsia": "Fuchsia", "lilac": "Lilac", "lavender": "Lavender", "violet": "Violet",
+            "white": "White", "gray": "Gray", "fume": "Charcoal", "black": "Black", "cream": "Cream", "beige": "Beige",
+            "tan": "Tan", "cinnamon": "Cinnamon", "earth": "Earth", "chestnut": "Chestnut", "plum": "Plum",
+            "khaki": "Khaki", "lemon": "Lemon", "yellow": "Yellow", "gold": "Gold", "mustard": "Mustard",
+            "peach": "Peach", "apricot": "Apricot", "salmon": "Salmon", "orange": "Orange", "dusty-pink": "Dusty Rose",
+            "coral": "Coral", "pomegranate-red": "Pomegranate", "red": "Red", "cherry-red": "Cherry", "dark-red": "Burgundy",
+            "pink": "Pink", "fuchsia": "Fuchsia", "lilac": "Lilac", "lavender": "Lavender", "violet": "Violet",
             "purple": "Purple", "ice-blue": "Ice Blue", "turquoise": "Turquoise", "blue": "Blue",
             "saxony-blue": "Royal Blue", "navy": "Navy", "mint": "Mint", "water-green": "Aqua Green",
-            "grass-green": "Grass Green", "emerald": "Emerald", "green": "Green", "olive": "Olive",
-            "silver": "Silver", "bronze": "Bronze", "leopard": "Leopard", "zebra": "Zebra",
-            "snakeskin": "Snakeskin", "striped": "Striped", "plaid": "Plaid", "floral": "Floral",
-            "polka-dot": "Polka Dot"
+            "grass-green": "Grass Green", "emerald": "Emerald", "green": "Green", "olive": "Olive", "silver": "Silver",
+            "bronze": "Bronze", "leopard": "Leopard", "zebra": "Zebra", "snakeskin": "Snakeskin", "striped": "Striped",
+            "plaid": "Plaid", "floral": "Floral", "polka-dot": "Polka Dot"
         },
         "categories": {
-            # Ana kategoriler (AI'ın doğrudan kullanması gerekmese de referans için)
             "top": "Top Wear", "bottom": "Bottom Wear", "dresses-jumpsuits": "Dresses & Jumpsuits",
             "outerwear": "Outerwear", "shoes": "Shoes", "bags": "Bags", "accessories": "Accessories", "suits": "Suits",
-            # Alt Kategoriler (AI'ın kullanacağı asıl anahtarlar)
             "t-shirt": "T-Shirt", "blouse": "Blouse", "shirt": "Shirt", "sweater": "Sweater", "pullover": "Pullover",
             "sweatshirt": "Sweatshirt", "hoodie": "Hoodie", "track-top": "Track Top", "crop-top": "Crop Top",
             "tank-top": "Tank Top", "bodysuit": "Bodysuit", "vest": "Vest", "tunic": "Tunic", "bralette": "Bralette",
@@ -51,34 +47,22 @@ TRANSLATIONS = {
             "suit-trousers": "Suit Trousers", "tuxedo": "Tuxedo", "polo-shirt": "Polo Shirt"
         },
         "occasions": {
-            "categories": {
-                "casual": "Casual", "work": "Work & Professional", "formal": "Celebration & Formal",
-                "social": "Social", "active": "Active & Sports", "special": "Travel & Special"
-            },
-            "daily-errands": "Daily Errands", "friends-gathering": "Friends Gathering", "weekend-brunch": "Weekend Brunch",
-            "coffee-date": "Coffee", "shopping": "Shopping", "walk": "A Walk", "office-day": "Day at the Office",
-            "business-meeting": "Business Meeting", "business-lunch": "Business Lunch", "networking": "Networking Event",
-            "university": "University / Class", "wedding": "Wedding", "special-event": "Special Event",
-            "celebration": "Celebration", "formal-dinner": "Formal Dinner", "dinner-date": "Dinner Date",
-            "birthday-party": "Birthday Party", "concert": "Concert", "night-out": "Night Out",
-            "house-party": "House Party", "gym": "Gym / Fitness", "yoga-pilates": "Yoga / Pilates",
-            "outdoor-sports": "Outdoor Sports", "hiking": "Hiking", "travel": "Travel",
-            "weekend-getaway": "Weekend Getaway", "holiday": "Holiday", "festival": "Festival", "sightseeing": "Sightseeing"
+            "categories": { "casual": "Casual", "work": "Work & Professional", "formal": "Celebration & Formal", "social": "Social", "active": "Active & Sports", "special": "Travel & Special" },
+            "daily-errands": "Daily Errands", "friends-gathering": "Friends Gathering", "weekend-brunch": "Weekend Brunch", "coffee-date": "Coffee", "shopping": "Shopping", "walk": "A Walk", "office-day": "Day at the Office", "business-meeting": "Business Meeting", "business-lunch": "Business Lunch", "networking": "Networking Event", "university": "University / Class", "wedding": "Wedding", "special-event": "Special Event", "celebration": "Celebration", "formal-dinner": "Formal Dinner", "dinner-date": "Dinner Date", "birthday-party": "Birthday Party", "concert": "Concert", "night-out": "Night Out", "house-party": "House Party", "gym": "Gym / Fitness", "yoga-pilates": "Yoga / Pilates", "outdoor-sports": "Outdoor Sports", "hiking": "Hiking", "travel": "Travel", "weekend-getaway": "Weekend Getaway", "holiday": "Holiday", "festival": "Festival", "sightseeing": "Sightseeing"
         }
     },
     "tr": {
         "colors": {
-            "white": "Beyaz", "gray": "Gri", "fume": "Füme", "black": "Siyah", "cream": "Krem",
-            "beige": "Bej", "tan": "Taba", "cinnamon": "Tarçın", "earth": "Toprak", "chestnut": "Kestane",
-            "plum": "Mürdüm", "khaki": "Haki", "lemon": "Limon", "yellow": "Sarı", "gold": "Altın",
-            "mustard": "Hardal", "peach": "Şeftali", "apricot": "Yavruağzı", "salmon": "Somon",
-            "orange": "Portakal", "dusty-pink": "Toz Pembe", "coral": "Mercan", "pomegranate-red": "Nar Çiçeği",
-            "red": "Kırmızı", "cherry-red": "Kiraz", "dark-red": "Vişne", "pink": "Pembe", "fuchsia": "Fuşya",
-            "lilac": "Leylak", "lavender": "Lavanta", "violet": "Menekşe", "purple": "Mor",
-            "ice-blue": "Buz Mavisi", "turquoise": "Turkuaz", "blue": "Mavi", "saxony-blue": "Saks Mavisi",
-            "navy": "Lacivert", "mint": "Nane", "water-green": "Su Yeşili", "grass-green": "Çimen Yeşili",
-            "emerald": "Zümrüt", "green": "Yeşil", "olive": "Zeytin Yeşili", "silver": "Gümüş",
-            "bronze": "Bronz", "leopard": "Leopar", "zebra": "Zebra", "snakeskin": "Yılan",
+            "white": "Beyaz", "gray": "Gri", "fume": "Füme", "black": "Siyah", "cream": "Krem", "beige": "Bej",
+            "tan": "Taba", "cinnamon": "Tarçın", "earth": "Toprak", "chestnut": "Kestane", "plum": "Mürdüm",
+            "khaki": "Haki", "lemon": "Limon", "yellow": "Sarı", "gold": "Altın", "mustard": "Hardal",
+            "peach": "Şeftali", "apricot": "Yavruağzı", "salmon": "Somon", "orange": "Portakal",
+            "dusty-pink": "Toz Pembe", "coral": "Mercan", "pomegranate-red": "Nar Çiçeği", "red": "Kırmızı",
+            "cherry-red": "Kiraz", "dark-red": "Vişne", "pink": "Pembe", "fuchsia": "Fuşya", "lilac": "Leylak",
+            "lavender": "Lavanta", "violet": "Menekşe", "purple": "Mor", "ice-blue": "Buz Mavisi", "turquoise": "Turkuaz",
+            "blue": "Mavi", "saxony-blue": "Saks Mavisi", "navy": "Lacivert", "mint": "Nane", "water-green": "Su Yeşili",
+            "grass-green": "Çimen Yeşili", "emerald": "Zümrüt", "green": "Yeşil", "olive": "Zeytin Yeşili",
+            "silver": "Gümüş", "bronze": "Bronz", "leopard": "Leopar", "zebra": "Zebra", "snakeskin": "Yılan",
             "striped": "Çizgili", "plaid": "Kareli", "floral": "Çiçekli", "polka-dot": "Puantiye"
         },
         "categories": {
@@ -106,27 +90,17 @@ TRANSLATIONS = {
             "scarf": "Eşarp", "hijab": "Başörtüsü", "shawl": "Şal", "sunglasses": "Güneş Gözlüğü",
             "belt": "Kemer", "hat": "Şapka", "watch": "Saat", "tie": "Kravat", "suit-jacket": "Takım Ceket",
             "suit-trousers": "Takım Pantolon", "tuxedo": "Smokin", "polo-shirt": "Polo Tişört"
-        },        "occasions": {
-        "categories": {
-                "casual": "Günlük", "work": "İş & Profesyonel", "formal": "Kutlama & Resmi",
-                "social": "Sosyal", "active": "Aktif & Spor", "special": "Seyahat & Özel"
-            },
-            "daily-errands": "Günlük İşler", "friends-gathering": "Arkadaş Buluşması", "weekend-brunch": "Hafta Sonu Kahvaltısı",
-            "coffee-date": "Kahve", "shopping": "Alışveriş", "walk": "Yürüyüş", "office-day": "Ofis Günü",
-            "business-meeting": "İş Toplantısı", "business-lunch": "İş Yemeği", "networking": "Sektörel Buluşma",
-            "university": "Üniversite / Ders", "wedding": "Düğün", "special-event": "Özel Etkinlik",
-            "celebration": "Kutlama", "formal-dinner": "Resmi Akşam Yemeği", "dinner-date": "Akşam Yemeği Randevusu",
-            "birthday-party": "Doğum Günü Partisi", "concert": "Konser", "night-out": "Gece Dışarı Çıkma",
-            "house-party": "Ev Partisi", "gym": "Spor Salonu / Fitness", "yoga-pilates": "Yoga / Pilates",
-            "outdoor-sports": "Açık Hava Sporları", "hiking": "Doğa Yürüyüşü", "travel": "Seyahat",
-            "weekend-getaway": "Hafta Sonu Kaçamağı", "holiday": "Tatil", "festival": "Festival", "gezi": "Gezi"
+        },
+        "occasions": {
+            "categories": { "casual": "Günlük", "work": "İş & Profesyonel", "formal": "Kutlama & Resmi", "social": "Sosyal", "active": "Aktif & Spor", "special": "Seyahat & Özel" },
+            "daily-errands": "Günlük İşler", "friends-gathering": "Arkadaş Buluşması", "weekend-brunch": "Hafta Sonu Kahvaltısı", "coffee-date": "Kahve", "shopping": "Alışveriş", "walk": "Yürüyüş", "office-day": "Ofis Günü", "business-meeting": "İş Toplantısı", "business-lunch": "İş Yemeği", "networking": "Sektörel Buluşma", "university": "Üniversite / Ders", "wedding": "Düğün", "special-event": "Özel Etkinlik", "celebration": "Kutlama", "formal-dinner": "Resmi Akşam Yemeği", "dinner-date": "Akşam Yemeği Randevusu", "birthday-party": "Doğum Günü Partisi", "concert": "Konser", "night-out": "Gece Dışarı Çıkma", "house-party": "Ev Partisi", "gym": "Spor Salonu / Fitness", "yoga-pilates": "Yoga / Pilates", "outdoor-sports": "Açık Hava Sporları", "hiking": "Doğa Yürüyüşü", "travel": "Seyahat", "weekend-getaway": "Hafta Sonu Kaçamağı", "holiday": "Tatil", "festival": "Festival", "sightseeing": "Gezi"
         }
     }
 }
 
 def get_translation(lang_code: str, key: str, default_lang: str = 'en'):
     """
-    Belirtilen dil ve anahtar için çeviriyi alır.
+    Belirtilen dil ve anahtar için çeviri sözlüğünü alır.
     Bulamazsa, varsayılan dildeki çeviriyi döner.
     """
     return TRANSLATIONS.get(lang_code, TRANSLATIONS[default_lang]).get(key, {})
