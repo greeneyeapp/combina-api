@@ -186,3 +186,15 @@ class PurchaseVerification(BaseModel):
     
     class Config:
         allow_population_by_field_name = True
+        
+class OptimizedClothingItem(BaseModel):
+    """
+    Represents the optimized, pre-filtered clothing item data
+    sent from the client.
+    """
+    id: str
+    name: str
+    category: str
+    colors: List[str]
+    season: List[str]
+    style: List[str]
