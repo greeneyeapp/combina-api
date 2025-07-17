@@ -14,10 +14,10 @@ import time
 # Proje yapınıza göre import yollarını güncelleyin
 from core.config import settings
 from core.security import get_current_user_id
-# ŞEMA GÜNCELLENDİ: Artık client'tan gelen optimize edilmiş modeli ve eski ClothingItem'ı bekliyoruz.
-# Mevcut kodunuzda her iki şema da kullanılıyor, bu yüzden ikisini de tutuyoruz.
-from schemas import OutfitRequest, OutfitResponse, ClothingItem, OptimizedClothingItem
-from core import localization # YENİ: Merkezi lokalizasyon dosyamızı import ediyoruz
+# YENİ: Şema artık client'tan gelen optimize edilmiş modeli bekliyor
+from schemas import OutfitRequest, OutfitResponse, OptimizedClothingItem
+# YENİ: Merkezi lokalizasyon dosyamızı import ediyoruz
+from core import localization
 
 router = APIRouter(prefix="/api", tags=["outfits"])
 
@@ -67,7 +67,7 @@ gpt_balancer = GPTLoadBalancer()
 class AdvancedOutfitEngine:
     """
     YENİDEN YAPILANDIRILDI: Kombin mantığı motoru.
-    Sorumluluk AI prompt yönetimi ve backend çevirisine kaydırıldı.
+    AI prompt'u, tam çeviri yapabilmesi için lokalizasyon verileriyle besler.
     """
 
     def analyze_wardrobe(self, wardrobe: List[OptimizedClothingItem]) -> Dict[str, Any]:
@@ -77,47 +77,42 @@ class AdvancedOutfitEngine:
         
         categories = sorted(list(set(item.category for item in wardrobe)))
         styles = sorted(list(set(style for item in wardrobe for style in item.style)))
-        
-        color_counts = {}
+        color_counts = {color: 0 for color in localization.TRANSLATIONS['en']['colors']}
         for item in wardrobe:
             for color in item.colors:
-                color_counts[color] = color_counts.get(color, 0) + 1
+                if color in color_counts:
+                    color_counts[color] += 1
         
         dominant_colors = sorted(color_counts, key=color_counts.get, reverse=True)
-        
-        return {
-            "total_items": len(wardrobe),
-            "categories": categories,
-            "dominant_colors": dominant_colors,
-            "styles": styles
-        }
+        return {"total_items": len(wardrobe), "categories": categories, "dominant_colors": dominant_colors, "styles": styles}
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         """AI'a gönderilecek gardırop listesini kompakt bir string'e dönüştürür."""
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
 
     def create_advanced_prompt(self, request: OutfitRequest, gender: str, wardrobe_summary: Dict[str, Any]) -> str:
-        """
-        YENİ MANTIK: AI için her zaman İngilizce ve temiz bir prompt oluşturur.
-        Çeviri yükünü ve karmaşık kuralları AI'dan alır.
-        """
+        """YENİ MANTIK: AI'a tam ve doğru çeviri yapması için gerekli tüm bilgileri verir."""
+        lang_code = request.language
         en_occasions = localization.get_translation('en', 'occasions')
         occasion_text = en_occasions.get(request.occasion, request.occasion.replace('-', ' '))
 
+        # Dil'e özel talimat ve kılavuzları hazırla
+        target_language, critical_translation_rules = self._get_language_specific_instructions(lang_code)
+
         pinterest_instructions = ""
         if request.plan == "premium":
-            pinterest_instructions = ',"pinterest_links": [{"title": "Creative Title in English", "search_query": "A logical Pinterest search query in English"}]'
+            # Pinterest sorgusunu İngilizce isteyip backend'de çevirmek daha güvenilir
+            pinterest_instructions = ',"pinterest_links": [{"title": "Creative Title in {target_language}", "search_query": "A logical Pinterest search query in English"}]'
 
         prompt = f"""
 You are an expert fashion stylist. Create a complete {gender} outfit for the occasion: '{occasion_text}'. The weather is {request.weather_condition}.
 
-CRITICAL INSTRUCTIONS:
-- You MUST respond in English.
-- Your entire response MUST be a single valid JSON object.
-- In the "description" and "suggestion_tip", you can use color and category keywords like "ice-blue", "t-shirt", "leather-jacket". The backend will handle the translation. For example: "This ice-blue t-shirt is perfect...".
+CRITICAL LANGUAGE REQUIREMENT:
+You MUST write all descriptive fields ("description", "suggestion_tip", and "title" for Pinterest) in {target_language}.
+{critical_translation_rules}
 
 CONTEXT:
-- Wardrobe: You are provided with {wardrobe_summary['total_items']} pre-filtered items. Styles: {', '.join(wardrobe_summary['styles'])}.
+- Wardrobe: You are provided with {wardrobe_summary['total_items']} items. Styles: {', '.join(wardrobe_summary['styles'])}.
 - Recent Outfits (Avoid these items): {', '.join([item for outfit in request.last_5_outfits for item in outfit.items][:15]) if request.last_5_outfits else "None"}
 
 REQUIREMENTS:
@@ -129,18 +124,45 @@ ITEM DATABASE:
 
 JSON RESPONSE STRUCTURE:
 {{
-    "items": [{{"id": "item_id_from_database", "name": "Creative Item Name in English", "category": "actual_category_from_database"}}],
-    "description": "An outfit description in English, using keywords like 'ice-blue'.",
-    "suggestion_tip": "A styling tip in English, using keywords like 'leather-jacket'."
+    "items": [{{"id": "item_id_from_database", "name": "Creative Name in {target_language}", "category": "actual_category_from_database"}}],
+    "description": "A complete outfit description in {target_language}.",
+    "suggestion_tip": "A practical styling tip in {target_language}."
     {pinterest_instructions}
 }}
 """
         return prompt
 
+    def _get_language_specific_instructions(self, lang_code: str) -> (str, str):
+        """Dil koduna göre dil adını ve çeviri talimatlarını döndürür."""
+        if lang_code == 'en':
+            return "English", ""
+
+        # Şu an için sadece Türkçe destekleniyor, gelecekte burası genişletilebilir.
+        target_language = "Turkish"
+        translations = localization.TRANSLATIONS.get(lang_code, localization.TRANSLATIONS['en'])
+        
+        color_guide_str = json.dumps(translations.get('colors', {}), ensure_ascii=False, indent=2)
+        category_guide_str = json.dumps(translations.get('categories', {}), ensure_ascii=False, indent=2)
+        occasion_guide_str = json.dumps(translations.get('occasions', {}), ensure_ascii=False, indent=2)
+
+        return target_language, f"""
+CRITICAL TRANSLATION RULES:
+- When you mention a color, category, or occasion, you MUST use the exact Turkish translation from the guides below.
+- Do NOT translate them yourself. Find the English key (e.g., "ice-blue") and use its exact Turkish value (e.g., "Buz Mavisi").
+
+TURKISH COLOR GUIDE:
+{color_guide_str}
+
+TURKISH CATEGORY GUIDE:
+{category_guide_str}
+
+TURKISH OCCASION GUIDE:
+{occasion_guide_str}
+"""
+
     def validate_outfit_structure(self, items_from_ai: List[Dict[str, str]], wardrobe: List[OptimizedClothingItem]) -> List[Dict[str, str]]:
         """AI'dan gelen item listesinin yapısını ve ID'lerin geçerliliğini kontrol eder."""
-        if not items_from_ai or not isinstance(items_from_ai, list):
-            return []
+        if not items_from_ai or not isinstance(items_from_ai, list): return []
         
         wardrobe_map = {item.id: item for item in wardrobe}
         validated_items = []
@@ -150,39 +172,23 @@ JSON RESPONSE STRUCTURE:
                     original_item = wardrobe_map[item["id"]]
                     validated_items.append({
                         "id": original_item.id,
-                        "name": original_item.name,
+                        "name": item["name"],  # AI'ın yarattığı yaratıcı ismi (artık doğru dilde) kullan
                         "category": original_item.category
                     })
         return validated_items
 
-    def translate_response(self, response_data: Dict[str, Any], lang_code: str) -> Dict[str, Any]:
-        """YENİ FONKSİYON: AI'dan gelen İngilizce yanıtı, istenen dile çevirir."""
-        if lang_code == 'en' or not lang_code:
-            return response_data
+    def translate_pinterest_query(self, query: str, lang_code: str) -> str:
+        """Sadece Pinterest sorgusunu İngilizce'den hedef dile çevirir."""
+        if lang_code == 'en' or not query: return query
 
         translations = localization.TRANSLATIONS.get(lang_code, localization.TRANSLATIONS['en'])
-        colors = translations.get('colors', {})
-        categories = translations.get('categories', {})
-        
-        all_keywords = {**colors, **categories}
+        all_keywords = {**translations.get('colors', {}), **translations.get('categories', {})}
         sorted_keywords = sorted(all_keywords.keys(), key=len, reverse=True)
 
-        for field in ['description', 'suggestion_tip']:
-            if field in response_data and response_data[field]:
-                text = response_data[field]
-                for key in sorted_keywords:
-                    text = text.replace(key, all_keywords[key])
-                response_data[field] = text
-        
-        if 'pinterest_links' in response_data:
-            for link in response_data['pinterest_links']:
-                if 'search_query' in link:
-                    query = link['search_query']
-                    for key in sorted_keywords:
-                        query = query.replace(key, all_keywords[key])
-                    link['search_query'] = query
-        
-        return response_data
+        for key in sorted_keywords:
+            query = query.replace(key, all_keywords[key])
+        return query
+
 
 outfit_engine = AdvancedOutfitEngine()
 
@@ -218,10 +224,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
 
 async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> str:
     """GPT API'yi retry logic ile çağırır. Bu yapı korunmuştur."""
-    config = {
-        "free": {"max_tokens": 800, "temperature": 0.7},
-        "premium": {"max_tokens": 1200, "temperature": 0.8}
-    }
+    config = {"free": {"max_tokens": 800, "temperature": 0.7}, "premium": {"max_tokens": 1200, "temperature": 0.8}}
     gpt_config = config.get(plan, config["free"])
     
     for attempt in range(max_retries + 1):
@@ -256,8 +259,8 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse)
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     """
-    YENİDEN YAPILANDIRILDI: Gelişmiş kombin öneri endpoint'i.
-    Artık client'tan gelen filtrelenmiş gardırobu kullanır ve backend'de çeviri yapar.
+    YENİ MİMARİ: Gelişmiş kombin öneri endpoint'i.
+    Client'tan gelen filtrelenmiş gardırobu kullanır, AI'a çeviri için kılavuz sağlar.
     """
     try:
         user_id, plan, gender = user_info["user_id"], user_info["plan"], user_info["gender"]
@@ -271,9 +274,7 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         response_content = await call_gpt_with_retry(prompt, plan)
         ai_response = json.loads(response_content)
         
-        final_items = outfit_engine.validate_outfit_structure(
-            ai_response.get("items", []), request.wardrobe
-        )
+        final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
         if not final_items:
             raise HTTPException(status_code=500, detail="AI failed to create a valid outfit with items from the provided wardrobe.")
         
@@ -285,30 +286,23 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         }
         
         if plan == "premium" and "pinterest_links" in ai_response:
+            final_pinterest_links = []
             for link_idea in ai_response.get("pinterest_links", []):
                 if "search_query" in link_idea and link_idea["search_query"]:
-                    response_data["pinterest_links"].append({
-                        "title": link_idea.get("title", "Inspiration"),
-                        "search_query": link_idea.get("search_query", "")
-                    })
-
-        translated_response_data = outfit_engine.translate_response(response_data, request.language)
-        
-        if "pinterest_links" in translated_response_data:
-            final_pinterest_links = []
-            for link_data in translated_response_data["pinterest_links"]:
-                if link_data.get("search_query"):
-                    encoded_query = quote(link_data["search_query"])
+                    # Önce İngilizce sorguyu çevir
+                    translated_query = outfit_engine.translate_pinterest_query(link_idea["search_query"], request.language)
+                    # Sonra URL oluştur
+                    encoded_query = quote(translated_query)
                     final_pinterest_links.append({
-                        "title": link_data["title"],
+                        "title": link_idea.get("title", "Inspiration"), # Başlık zaten doğru dilde geldi
                         "url": f"https://www.pinterest.com/search/pins/?q={encoded_query}"
                     })
-            translated_response_data["pinterest_links"] = final_pinterest_links
+            response_data["pinterest_links"] = final_pinterest_links
 
         db.collection('users').document(user_id).update({'usage.count': firestore.Increment(1)})
         
-        print(f"✅ Outfit suggestion created and translated to '{request.language}' for {plan} user")
-        return OutfitResponse(**translated_response_data)
+        print(f"✅ Outfit suggestion created and provided in '{request.language}' for {plan} user")
+        return OutfitResponse(**response_data)
         
     except json.JSONDecodeError:
         raise HTTPException(status_code=502, detail="Failed to parse the response from the AI service.")
@@ -325,9 +319,7 @@ async def get_usage_status(user_id: str = Depends(get_current_user_id)):
     try:
         user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get()
-        
-        if not user_doc.exists:
-            raise HTTPException(status_code=404, detail="User not found")
+        if not user_doc.exists: raise HTTPException(status_code=404, detail="User not found")
         
         user_data = user_doc.to_dict()
         plan = user_data.get("plan", "free")
@@ -336,7 +328,7 @@ async def get_usage_status(user_id: str = Depends(get_current_user_id)):
         
         current_usage = usage_data.get("count", 0) if usage_data.get("date") == today else 0
         rewarded_count = usage_data.get("rewarded_count", 0) if usage_data.get("date") == today else 0
-        daily_limit = PLAN_LIMITS.get(plan) # None for premium
+        daily_limit = PLAN_LIMITS.get(plan)
         
         return {
             "plan": plan,

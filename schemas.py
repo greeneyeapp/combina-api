@@ -1,6 +1,11 @@
+# schemas.py
+
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Union
-from datetime import datetime
+from typing import List, Optional, Union, Any, Dict
+
+# =================================================================
+# Temel ve Yetkilendirme Modelleri (Mevcut yapı korundu)
+# =================================================================
 
 class Token(BaseModel):
     access_token: str
@@ -9,7 +14,6 @@ class Token(BaseModel):
 class IdToken(BaseModel):
     id_token: str
 
-# OAuth için yeni modeller
 class GoogleAuthRequest(BaseModel):
     access_token: str
 
@@ -23,174 +27,14 @@ class UserInfoUpdate(BaseModel):
     gender: str
     birthDate: str
 
-class ClothingItem(BaseModel):
-    id: str
-    name: str
-    category: str
-    subcategory: Optional[str] = None
-    
-    # ÇOK ÖNEMLİ: Hem eski hem yeni format desteği
-    color: Optional[str] = None  # Backward compatibility için
-    colors: Optional[List[str]] = None  # Yeni çoklu renk desteği
-    
-    season: List[str]
-    style: Union[str, List[str]]  # String veya array desteği
-    notes: Optional[str] = None
-    createdAt: Optional[str] = None
-    
-    # YENİ FIELD - Eksik olan field
-    isImageMissing: Optional[bool] = False  # Default olarak False
-    
-    @validator('colors', pre=True, always=True)
-    def ensure_colors_from_color(cls, v, values):
-        """color field'ından colors array'ini oluştur"""
-        if v is None and 'color' in values and values['color']:
-            return [values['color']]
-        return v
-    
-    @validator('color', pre=True, always=True)
-    def ensure_color_from_colors(cls, v, values):
-        """colors array'inden color field'ını oluştur"""
-        if v is None and 'colors' in values and values['colors'] and len(values['colors']) > 0:
-            return values['colors'][0]
-        return v
+# =================================================================
+# YENİ ve GÜNCELLENMİŞ MODELLER (Yeni Mimarimiz İçin)
+# =================================================================
 
-    class Config:
-        allow_population_by_field_name = True
-        fields = {
-            'createdAt': 'createdAt',
-            'subcategory': 'subcategory',
-            'isImageMissing': 'isImageMissing'
-        }
-    id: str
-    name: str
-    category: str
-    subcategory: Optional[str] = None
-    
-    # ÇOK ÖNEMLİ: Hem eski hem yeni format desteği
-    color: Optional[str] = None  # Backward compatibility için
-    colors: Optional[List[str]] = None  # Yeni çoklu renk desteği
-    
-    season: List[str]
-    style: Union[str, List[str]]  # String veya array desteği
-    notes: Optional[str] = None
-    createdAt: Optional[str] = None
-    
-    @validator('colors', pre=True, always=True)
-    def ensure_colors_from_color(cls, v, values):
-        """color field'ından colors array'ini oluştur"""
-        if v is None and 'color' in values and values['color']:
-            return [values['color']]
-        return v
-    
-    @validator('color', pre=True, always=True)
-    def ensure_color_from_colors(cls, v, values):
-        """colors array'inden color field'ını oluştur"""
-        if v is None and 'colors' in values and values['colors'] and len(values['colors']) > 0:
-            return values['colors'][0]
-        return v
-
-    class Config:
-        allow_population_by_field_name = True
-        fields = {
-            'createdAt': 'createdAt',
-            'subcategory': 'subcategory',
-        }
-
-class Outfit(BaseModel):
-    items: List[str]
-    occasion: str
-    weather: Optional[str] = None
-    date: str
-    
-    class Config:
-        allow_population_by_field_name = True
-
-class RequestContext(BaseModel):
-    """Optimize edilmiş veri hakkında context bilgileri"""
-    total_wardrobe_size: Optional[int] = None
-    filtered_wardrobe_size: Optional[int] = None
-    user_plan: Optional[str] = None
-    
-    class Config:
-        allow_population_by_field_name = True
-
-class PinterestLink(BaseModel):
-    title: str
-    url: str
-
-class OutfitRequest(BaseModel):
-    language: str = Field(..., alias='language')
-    gender: Optional[str] = Field(None, alias='gender')
-    plan: str = Field(..., alias='plan')
-    
-    wardrobe: List[ClothingItem] = Field(..., alias='wardrobe')
-    last_5_outfits: List[Outfit] = Field(..., alias='last_5_outfits')
-    weather_condition: str = Field(..., alias='weather_condition')
-    occasion: str = Field(..., alias='occasion')
-    context: Optional[RequestContext] = Field(None, alias='context')
-    
-    class Config:
-        allow_population_by_field_name = True
-        allow_population_by_alias = True
-
-class SuggestedItem(BaseModel):
-    id: str
-    name: str
-    category: str
-    subcategory: Optional[str] = None
-    
-    class Config:
-        allow_population_by_field_name = True
-
-class OutfitResponse(BaseModel):
-    items: List[SuggestedItem]
-    description: str
-    suggestion_tip: Optional[str] = None
-    pinterest_links: Optional[List[PinterestLink]] = None
-    
-    class Config:
-        allow_population_by_field_name = True
-
-class ProfileInit(BaseModel):
-    gender: str
-    fullname: str
-    birthDate: Optional[str] = None
-    
-    class Config:
-        allow_population_by_field_name = True
-
-# YENİ: Usage status için schema
-class UsageStatusResponse(BaseModel):
-    plan: str
-    current_usage: int
-    daily_limit: Union[int, str]  # "unlimited" veya sayı
-    remaining: Union[int, str]    # "unlimited" veya sayı
-    is_unlimited: bool
-    date: str
-    percentage_used: Optional[float] = None  # Free plan için yüzde
-    
-    class Config:
-        allow_population_by_field_name = True
-
-# YENİ: Plan güncelleme için schema
-class PlanUpdateRequest(BaseModel):
-    plan: str = Field(..., description="New plan (free, premium)")
-    
-    class Config:
-        allow_population_by_field_name = True
-
-# YENİ: Satın alma doğrulama için schema
-class PurchaseVerification(BaseModel):
-    customer_info: dict
-    
-    class Config:
-        allow_population_by_field_name = True
-        
 class OptimizedClothingItem(BaseModel):
     """
-    Represents the optimized, pre-filtered clothing item data
-    sent from the client.
+    YENİ: Client tarafından akıllıca filtrelendikten sonra gönderilen,
+    optimize edilmiş ve hafifletilmiş kıyafet modeli.
     """
     id: str
     name: str
@@ -198,3 +42,123 @@ class OptimizedClothingItem(BaseModel):
     colors: List[str]
     season: List[str]
     style: List[str]
+
+class OptimizedOutfit(BaseModel):
+    """
+    YENİ: Tekrarları önlemek için gönderilen, son 5 kombinin
+    optimize edilmiş yapısı. outfits.py'deki `Outfit` ile aynı yapıya sahip.
+    """
+    items: List[str]
+    occasion: str
+    weather: Optional[str] = None
+    date: str
+
+class RequestContext(BaseModel):
+    """
+    GÜNCELLENDİ: API'nin isteği daha iyi analiz edebilmesi için
+    client'tan gönderilen meta veri.
+    """
+    total_wardrobe_size: int
+    filtered_wardrobe_size: int
+    user_plan: str
+    optimization_applied: bool
+
+class PinterestLink(BaseModel):
+    """Pinterest linki için yanıt modeli."""
+    title: str
+    url: str
+
+class OutfitRequest(BaseModel):
+    """
+    GÜNCELLENDİ: /suggest-outfit endpoint'i için ana istek modeli.
+    Artık optimize edilmiş modelleri kullanır.
+    """
+    language: str = Field(..., alias='language')
+    gender: Optional[str] = Field(None, alias='gender')
+    plan: str = Field(..., alias='plan')
+
+    # EN KRİTİK DEĞİŞİKLİK: Artık hafifletilmiş modelleri bekliyoruz.
+    wardrobe: List[OptimizedClothingItem] = Field(..., alias='wardrobe')
+    last_5_outfits: List[OptimizedOutfit] = Field(..., alias='last_5_outfits')
+    
+    weather_condition: str = Field(..., alias='weather_condition')
+    occasion: str = Field(..., alias='occasion')
+    context: RequestContext = Field(..., alias='context')  # Artık zorunlu ve tam
+    
+    class Config:
+        # Pydantic V2 için doğru yapılandırma
+        populate_by_name = True
+
+class SuggestedItem(BaseModel):
+    id: str
+    name: str
+    category: str
+    subcategory: Optional[str] = None
+
+class OutfitResponse(BaseModel):
+    """Yanıt modeli. Değişiklik gerekmiyor."""
+    items: List[SuggestedItem]
+    description: str
+    suggestion_tip: Optional[str] = None
+    pinterest_links: Optional[List[PinterestLink]] = None
+
+# =================================================================
+# MEVCUT (ESKİ) YAPI - Gerekliyse Tutulabilir
+# =================================================================
+
+class ClothingItem(BaseModel):
+    """
+    Mevcut kodun başka bir yerinde hala kullanılıyorsa bu detaylı model tutulur.
+    Pydantic V2 uyarıları düzeltildi.
+    """
+    id: str
+    name: str
+    category: str
+    subcategory: Optional[str] = None
+    color: Optional[str] = None
+    colors: Optional[List[str]] = None
+    season: List[str]
+    style: Union[str, List[str]]
+    notes: Optional[str] = None
+    createdAt: Optional[str] = None
+    isImageMissing: Optional[bool] = False
+
+    @validator('colors', pre=True, always=True)
+    def ensure_colors_from_color(cls, v, values):
+        if v is None and 'color' in values and values['color']:
+            return [values['color']]
+        return v
+    
+    @validator('color', pre=True, always=True)
+    def ensure_color_from_colors(cls, v, values):
+        if v is None and 'colors' in values and values['colors']:
+            return values['colors'][0]
+        return v
+
+    class Config:
+        # Pydantic V2 için doğru yapılandırma
+        populate_by_name = True
+
+# =================================================================
+# Diğer Mevcut Modeller (Değişiklik Gerekmiyor)
+# =================================================================
+
+class ProfileInit(BaseModel):
+    gender: str
+    fullname: str
+    birthDate: Optional[str] = None
+
+class UsageStatusResponse(BaseModel):
+    plan: str
+    current_usage: int
+    daily_limit: Union[int, str]
+    remaining: Union[int, str]
+    is_unlimited: bool
+    date: str
+    percentage_used: Optional[float] = None
+
+class PlanUpdateRequest(BaseModel):
+    plan: str = Field(..., description="New plan (free, premium)")
+
+class PurchaseVerification(BaseModel):
+    customer_info: dict
