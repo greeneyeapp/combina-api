@@ -85,6 +85,13 @@ CONTEXT:
 - Wardrobe: You are provided with {request.context.filtered_wardrobe_size} pre-filtered items.
 - Recent Outfits (Avoid these item IDs): {', '.join([item for outfit in request.last_5_outfits for item in outfit.items][:15]) if request.last_5_outfits else "None"}
 
+CRITICAL FASHION LOGIC:
+- A complete outfit must consist of either (1) a top piece AND a bottom piece, OR (2) a one-piece item like a dress or jumpsuit.
+- **DO NOT combine a top (like a t-shirt, blouse, shirt) with a dress.** A dress is a standalone main item.
+- Only combine outerwear (like jackets, cardigans) with a complete outfit (top+bottom or a dress).
+- Ensure the styles of the selected items are cohesive and logical for the occasion.
+- Avoid selecting multiple items from the same core category (e.g., do not choose two different tops or two different trousers for one outfit).
+
 REQUIREMENTS:
 - Use ONLY the exact item IDs from the database below.
 - Keep "description" and "suggestion_tip" concise (1-2 sentences).
