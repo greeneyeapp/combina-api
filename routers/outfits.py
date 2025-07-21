@@ -178,7 +178,7 @@ async def call_gpt_with_retry(prompt: str, plan: str, attempt: int = 1, max_retr
     for i in range(max_retries + 1):
         client, client_type = gpt_balancer.get_available_client()
         try:
-            print(f"📡 Calling GPT (Attempt: {i+1}, Temp: {current_temp})..."); completion = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": "You are an expert fashion stylist. Always respond with valid JSON."}, {"role": "user", "content": prompt}], response_format={"type": "json_object"}, **gpt_config)
+            print(f"📡 Calling GPT (Attempt: {i+1}, Temp: {current_temp})..."); completion = client.chat.completions.create(model="gpt-4o-nano", messages=[{"role": "system", "content": "You are an expert fashion stylist. Always respond with valid JSON."}, {"role": "user", "content": prompt}], response_format={"type": "json_object"}, **gpt_config)
             response_content = completion.choices[0].message.content
             if not response_content: raise ValueError("Empty response from GPT")
             json.loads(response_content); gpt_balancer.report_success(client_type); return response_content
@@ -198,7 +198,7 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         request.wardrobe = filtered_wardrobe if filtered_wardrobe else request.wardrobe
         if not request.wardrobe: raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
 
-        max_attempts = 3; final_items = None; ai_response = None
+        max_attempts = 2; final_items = None; ai_response = None
         base_prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
         existing_outfits_ids = [sorted(outfit.get("items", [])) for outfit in user_info.get("recent_outfits", [])]
         hard_avoid_ids = set()
