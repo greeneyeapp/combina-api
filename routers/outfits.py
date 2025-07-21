@@ -218,16 +218,27 @@ class AdvancedOutfitEngine:
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
 
-    def create_advanced_prompt(self, request: OutfitRequest) -> str:
-        """NİHAİ PROMPT: Token açısından verimli, 3'lü Pinterest linki talimatı içeren prompt."""
+    def create_advanced_prompt(self, request: OutfitRequest, recent_outfits: List[List[str]]) -> str:
+        """NİHAİ PROMPT: Token açısından verimli ve son kombinleri 'set' olarak dikkate alan prompt."""
         lang_code, gender = request.language, request.gender
         target_language = localization.LANGUAGE_NAMES.get(lang_code, "English")
         en_occasions = localization.get_translation('en', 'occasions')
         occasion_text = en_occasions.get(request.occasion, request.occasion.replace('-', ' '))
 
+        # --- YENİ MANTIK: Son kombinleri 'set' olarak formatla ---
+        avoid_combos_str = ""
+        if recent_outfits:
+            # [['id1', 'id2'], ['id3', 'id4']] yapısını GPT'nin anlayacağı bir string'e dönüştürür.
+            combo_lines = []
+            for i, outfit_ids in enumerate(recent_outfits):
+                combo_lines.append(f"- Combo {i+1}: {', '.join(outfit_ids)}")
+            avoid_combos_str = "\n".join(combo_lines)
+        else:
+            avoid_combos_str = "None"
+        # --- YENİ MANTIK SONU ---
+
         pinterest_instructions = ""
         if request.plan == "premium":
-            # GÜNCELLENDİ: 3 farklı ve akıllı Pinterest linki için talimatlar
             pinterest_instructions = f''',"pinterest_links": [
             {{
                 "title": "A specific title in {target_language} about the exact outfit combo",
@@ -252,7 +263,8 @@ CRITICAL LANGUAGE REQUIREMENT:
 
 CONTEXT:
 - Wardrobe: You are provided with {request.context.filtered_wardrobe_size} pre-filtered items.
-- Recent Outfits (Avoid these item IDs): {', '.join([item for outfit in request.last_5_outfits for item in outfit.items][:15]) if request.last_5_outfits else "None"}
+- Recent Outfits (Do NOT suggest these exact combinations again. You can re-use individual items in NEW combinations.):
+{avoid_combos_str}
 
 CRITICAL FASHION LOGIC:
 - A complete outfit must consist of either (1) a top piece AND a bottom piece, OR (2) a one-piece item like a dress or jumpsuit.
@@ -302,17 +314,46 @@ JSON RESPONSE STRUCTURE:
 outfit_engine = AdvancedOutfitEngine()
 
 async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_id)):
-    today = str(date.today()); user_ref = db.collection('users').document(user_id)
-    user_doc = user_ref.get();
-    if not user_doc.exists: raise HTTPException(status_code=404, detail="User profile not found.")
-    user_data = user_doc.to_dict(); plan = user_data.get("plan", "free")
-    usage_data = user_data.get("usage", {});
-    if usage_data.get("date") != today: usage_data = {"count": 0, "date": today, "rewarded_count": 0}; user_ref.update({"usage": usage_data})
-    if plan == "premium": return {"user_id": user_id, "gender": user_data.get("gender", "male"), "plan": plan}
-    current_usage, rewarded_count = usage_data.get("count", 0), usage_data.get("rewarded_count", 0)
+    today = str(date.today())
+    user_ref = db.collection('users').document(user_id)
+    user_doc = user_ref.get()
+    
+    if not user_doc.exists: 
+        raise HTTPException(status_code=404, detail="User profile not found.")
+    
+    user_data = user_doc.to_dict()
+    plan = user_data.get("plan", "free")
+    
+    # --- YENİ EKLENDİ: Son kombinleri Firestore'dan oku ---
+    # Eğer 'recent_outfits' alanı yoksa, boş bir liste olarak kabul et.
+    recent_outfits = user_data.get("recent_outfits", [])
+    # --- YENİ KOD SONU ---
+    
+    usage_data = user_data.get("usage", {})
+    if usage_data.get("date") != today: 
+        usage_data = {"count": 0, "date": today, "rewarded_count": 0}
+        user_ref.update({"usage": usage_data})
+    
+    # --- GÜNCELLENDİ: Dönen veriye 'recent_outfits' eklendi ---
+    user_info = {
+        "user_id": user_id, 
+        "gender": user_data.get("gender", "unisex"), # 'unisex' varsayılan olarak eklendi
+        "plan": plan,
+        "recent_outfits": recent_outfits
+    }
+    # --- GÜNCELLEME SONU ---
+    
+    if plan == "premium": 
+        return user_info
+        
+    current_usage = usage_data.get("count", 0)
+    rewarded_count = usage_data.get("rewarded_count", 0)
     daily_limit = PLAN_LIMITS.get(plan, 2)
-    if current_usage >= (daily_limit + rewarded_count): raise HTTPException(status_code=429, detail=f"Daily limit reached.")
-    return {"user_id": user_id, "gender": user_data.get("gender", "male"), "plan": plan}
+    
+    if current_usage >= (daily_limit + rewarded_count): 
+        raise HTTPException(status_code=429, detail="Daily limit reached.")
+        
+    return user_info
 
 async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> str:
     config = {"free": {"max_tokens": 800, "temperature": 0.75}, "premium": {"max_tokens": 1200, "temperature": 0.75}}
@@ -334,22 +375,26 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
-        outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, request.gender)
+        # 1. Gardırop uygunluğunu kontrol et
+        outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
 
         if not request.wardrobe: 
             raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
         
-        prompt = outfit_engine.create_advanced_prompt(request)
+        # 2. GPT'ye gönderilecek prompt'u, son kombinleri de içerecek şekilde oluştur
+        prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
+        
+        # 3. GPT'yi çağır
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
         
+        # 4. Gelen yanıtı doğrula
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
         if not final_items: 
             raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
         
         description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
         suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
-        
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
         
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
@@ -361,7 +406,22 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                     final_pinterest_links.append(PinterestLink(title=link_idea.get("title", "Inspiration"), url=f"https://www.pinterest.com/search/pins/?q={encoded_query}"))
             response_data["pinterest_links"] = final_pinterest_links
 
-        db.collection('users').document(user_info["user_id"]).update({'usage.count': firestore.Increment(1)})
+        # 5. Yeni kombini Firestore'a kaydet
+        new_outfit_ids = [item.id for item in final_items]
+        existing_outfits = user_info.get("recent_outfits", [])
+        
+        # Eğer yeni kombin zaten listede varsa, tekrar ekleme.
+        if new_outfit_ids not in existing_outfits:
+            updated_outfits = [new_outfit_ids] + existing_outfits
+            trimmed_outfits = updated_outfits[:3] # Listeyi en fazla 3 elemanla sınırla
+        else:
+            trimmed_outfits = existing_outfits
+
+        db.collection('users').document(user_info["user_id"]).update({
+            'usage.count': firestore.Increment(1),
+            'recent_outfits': trimmed_outfits
+        })
+
         print(f"✅ Outfit suggestion created and provided in '{request.language}' for {user_info['plan']} user")
         return OutfitResponse(**response_data)
         
