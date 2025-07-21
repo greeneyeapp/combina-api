@@ -225,14 +225,20 @@ class AdvancedOutfitEngine:
         en_occasions = localization.get_translation('en', 'occasions')
         occasion_text = en_occasions.get(request.occasion, request.occasion.replace('-', ' '))
 
-        # --- YENİ MANTIK: Son kombinleri 'set' olarak formatla ---
+        # --- YENİ MANTIK: Harita dizisini (array of maps) işle ---
         avoid_combos_str = ""
         if recent_outfits:
-            # [['id1', 'id2'], ['id3', 'id4']] yapısını GPT'nin anlayacağı bir string'e dönüştürür.
             combo_lines = []
-            for i, outfit_ids in enumerate(recent_outfits):
-                combo_lines.append(f"- Combo {i+1}: {', '.join(outfit_ids)}")
-            avoid_combos_str = "\n".join(combo_lines)
+            for i, outfit_map in enumerate(recent_outfits):
+                # Her haritanın içinden 'items' listesini güvenli bir şekilde al.
+                outfit_ids = outfit_map.get('items', [])
+                if outfit_ids:
+                    combo_lines.append(f"- Combo {i+1}: {', '.join(outfit_ids)}")
+            
+            if combo_lines:
+                avoid_combos_str = "\n".join(combo_lines)
+            else:
+                avoid_combos_str = "None"
         else:
             avoid_combos_str = "None"
         # --- YENİ MANTIK SONU ---
@@ -375,28 +381,23 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
-        # 1. Gardırop uygunluğunu kontrol et
         outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
 
-        if not request.wardrobe: 
+        if not request.wardrobe:
             raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
-        
-        # 2. GPT'ye gönderilecek prompt'u, son kombinleri de içerecek şekilde oluştur
+
         prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
-        
-        # 3. GPT'yi çağır
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
-        
-        # 4. Gelen yanıtı doğrula
+
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
-        if not final_items: 
+        if not final_items:
             raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
-        
+
         description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
         suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
-        
+
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
             final_pinterest_links = []
             for link_idea in ai_response.get("pinterest_links", []):
@@ -406,25 +407,42 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                     final_pinterest_links.append(PinterestLink(title=link_idea.get("title", "Inspiration"), url=f"https://www.pinterest.com/search/pins/?q={encoded_query}"))
             response_data["pinterest_links"] = final_pinterest_links
 
-        # 5. Yeni kombini Firestore'a kaydet
-        new_outfit_ids = [item.id for item in final_items]
+        # --- NİHAİ DÜZELTME: Firestore'a Uyumlu Veri Yapısı ---
+        
+        # 1. Yeni kombinin ID'lerini bir liste olarak al.
+        new_outfit_ids = sorted([item.id for item in final_items]) # Sıralamak, karşılaştırmayı kolaylaştırır.
+        
+        # 2. Yeni kombini Firestore'un kabul ettiği bir harita (map) formatına dönüştür.
+        new_outfit_map = {"items": new_outfit_ids}
+        
+        # 3. Firestore'dan gelen mevcut kombin listesini al (bu da artık haritalardan oluşacak).
         existing_outfits = user_info.get("recent_outfits", [])
         
-        # Eğer yeni kombin zaten listede varsa, tekrar ekleme.
-        if new_outfit_ids not in existing_outfits:
-            updated_outfits = [new_outfit_ids] + existing_outfits
+        # 4. Yeni kombinin bir kopyası olup olmadığını kontrol et.
+        is_duplicate = False
+        for existing_outfit in existing_outfits:
+            # Her haritanın içindeki 'items' listesini sıralayarak karşılaştır.
+            if sorted(existing_outfit.get("items", [])) == new_outfit_ids:
+                is_duplicate = True
+                break
+        
+        # 5. Eğer kopya değilse, listeyi güncelle.
+        if not is_duplicate:
+            updated_outfits = [new_outfit_map] + existing_outfits
             trimmed_outfits = updated_outfits[:3] # Listeyi en fazla 3 elemanla sınırla
         else:
             trimmed_outfits = existing_outfits
 
+        # 6. Firestore'a hem kullanım sayısını hem de yeni listeyi (haritalardan oluşan dizi) tek seferde yaz.
         db.collection('users').document(user_info["user_id"]).update({
             'usage.count': firestore.Increment(1),
             'recent_outfits': trimmed_outfits
         })
+        # --- DÜZELTME SONU ---
 
         print(f"✅ Outfit suggestion created and provided in '{request.language}' for {user_info['plan']} user")
         return OutfitResponse(**response_data)
-        
+
     except json.JSONDecodeError: raise HTTPException(status_code=502, detail="Failed to parse AI response.")
     except HTTPException: raise
     except Exception as e:
