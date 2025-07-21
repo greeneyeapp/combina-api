@@ -178,7 +178,7 @@ async def call_gpt_with_retry(prompt: str, plan: str, attempt: int = 1, max_retr
     for i in range(max_retries + 1):
         client, client_type = gpt_balancer.get_available_client()
         try:
-            print(f"📡 Calling GPT (Attempt: {i+1}, Temp: {current_temp})..."); completion = client.chat.completions.create(model="gpt-4o-nano", messages=[{"role": "system", "content": "You are an expert fashion stylist. Always respond with valid JSON."}, {"role": "user", "content": prompt}], response_format={"type": "json_object"}, **gpt_config)
+            print(f"📡 Calling GPT (Attempt: {i+1}, Temp: {current_temp})..."); completion = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": "You are an expert fashion stylist. Always respond with valid JSON."}, {"role": "user", "content": prompt}], response_format={"type": "json_object"}, **gpt_config)
             response_content = completion.choices[0].message.content
             if not response_content: raise ValueError("Empty response from GPT")
             json.loads(response_content); gpt_balancer.report_success(client_type); return response_content
