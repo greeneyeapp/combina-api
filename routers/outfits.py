@@ -25,6 +25,44 @@ secondary_client = OpenAI(api_key=settings.OPENAI_API_KEY2)
 db = firestore.client()
 PLAN_LIMITS = {"free": 2, "premium": None}
 
+OCCASION_REQUIREMENTS = {
+    # === AKTİF & SPOR ===
+    "gym": {"leggings", "track-bottom", "athletic-shorts", "sports-bra", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"},
+    "yoga-pilates": {"leggings", "track-bottom", "bralette", "tank-top", "t-shirt"},
+    "outdoor-sports": {"track-bottom", "athletic-shorts", "leggings", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"},
+    "hiking": {"track-bottom", "leggings", "boots", "sneakers", "raincoat", "puffer-coat", "backpack"},
+
+    # === İŞ & PROFESYONEL ===
+    "office-day": {"trousers", "blouse", "shirt", "blazer", "skirt", "classic-shoes", "loafers", "suit-trousers", "dress-pants"},
+    "business-meeting": {"suit-jacket", "suit-trousers", "blazer", "shirt", "blouse", "evening-dress", "classic-shoes", "dress-pants"},
+    "business-lunch": {"trousers", "blouse", "shirt", "blazer", "casual-dress", "classic-shoes", "dress-pants", "linen-trousers"},
+    
+    # === KUTLAMA & RESMİ ===
+    "wedding": {"evening-dress", "suit-jacket", "suit-trousers", "tuxedo", "heels", "classic-shoes"},
+    "special-event": {"evening-dress", "suit-jacket", "suit-trousers", "jumpsuit", "heels"},
+    "celebration": {"evening-dress", "casual-dress", "jumpsuit", "heels", "blouse", "trousers"},
+    "formal-dinner": {"evening-dress", "suit-jacket", "suit-trousers", "tuxedo", "heels"},
+
+    # === GÜNLÜK & SOSYAL ===
+    "daily-errands": {"jeans", "t-shirt", "sweatshirt", "sneakers", "leggings"},
+    "shopping": {"jeans", "t-shirt", "sneakers", "casual-dress", "cardigan"},
+    "house-party": {"jeans", "blouse", "casual-dress", "sneakers", "t-shirt"},
+    "date-night": {"casual-dress", "evening-dress", "jeans", "blouse", "heels", "shirt"},
+    "brunch": {"casual-dress", "jeans", "blouse", "skirt", "sandals", "t-shirt"},
+    "friends-gathering": {"jeans", "t-shirt", "sweatshirt", "sneakers", "casual-dress"},
+    "cinema": {"jeans", "hoodie", "t-shirt", "sneakers"},
+    "concert": {"jeans", "t-shirt", "boots", "denim-jacket", "leather-jacket"},
+    "cafe": {"jeans", "t-shirt", "cardigan", "sneakers", "blouse"},
+    
+    # === SEYAHAT & ÖZEL ===
+    # 'swimwear' ve 'bikini' gibi kategoriler kaldırıldı ve yerine mevcut kategoriler kullanıldı.
+    "travel": {"jeans", "t-shirt", "sweatshirt", "sneakers", "backpack", "track-bottom"},
+    "weekend-getaway": {"jeans", "casual-dress", "sneakers", "cardigan", "t-shirt"},
+    "holiday": {"sandals", "fabric-shorts", "casual-dress", "tank-top", "sunglasses"},
+    "festival": {"denim-shorts", "boots", "t-shirt", "crop-top", "denim-jacket"},
+    "sightseeing": {"sneakers", "jeans", "t-shirt", "crossbody-bag", "hat"}
+}
+
 class GPTLoadBalancer:
     def __init__(self): self.primary_failures, self.secondary_failures, self.last_primary_use, self.last_secondary_use, self.max_failures, self.failure_reset_time = 0, 0, 0, 0, 3, 300
     def get_available_client(self):
@@ -45,6 +83,24 @@ gpt_balancer = GPTLoadBalancer()
 
 class AdvancedOutfitEngine:
     """NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
+    
+    def check_wardrobe_compatibility(self, occasion: str, wardrobe: List[OptimizedClothingItem]):
+        """Verilen etkinlik için gardırobun uygun olup olmadığını kontrol eder."""
+        if occasion not in OCCASION_REQUIREMENTS:
+            return  # Etkinlik için bir kural yoksa, kontrolden geç
+
+        required_categories = OCCASION_REQUIREMENTS[occasion]
+        wardrobe_categories = {item.category for item in wardrobe}
+
+        # Gardıroptaki kategoriler ile gerekli kategoriler arasında en az bir ortak eleman var mı?
+        if not wardrobe_categories.intersection(required_categories):
+            missing_types = ", ".join(required_categories)
+            error_detail = (
+                f"Your wardrobe does not have suitable items for '{occasion}'. "
+                f"Please add items like: {missing_types}."
+            )
+            raise HTTPException(status_code=422, detail=error_detail)
+    # --- FONKSİYON SONU ---
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
@@ -165,12 +221,18 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
-        if not request.wardrobe: raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
+        outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe)
+
+        if not request.wardrobe: 
+            raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
+        
         prompt = outfit_engine.create_advanced_prompt(request)
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
+        
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
-        if not final_items: raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
+        if not final_items: 
+            raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
         
         description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
         suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
