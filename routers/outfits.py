@@ -25,15 +25,40 @@ secondary_client = OpenAI(api_key=settings.OPENAI_API_KEY2)
 db = firestore.client()
 PLAN_LIMITS = {"free": 2, "premium": None}
 
-# routers/outfits.py dosyasındaki mevcut haritaları bu nihai blokla değiştirin.
+# --- YENİ EKLENEN STİL ve RENK KURALLARI (Görsellerden Alınmıştır) ---
+# Not: Renk anahtarları core/localization.py ile uyumludur.
+POPULAR_COLOR_COMBINATIONS = {
+    "navy": {"colors": ["white", "beige", "mustard", "pink"], "effect": "Classic & Noble"},
+    "black": {"colors": ["silver", "red", "white"], "effect": "Strong & Timeless"},
+    "beige": {"colors": ["dark-red", "navy", "orange"], "effect": "Natural & Chic"},
+    "tan": {"colors": ["dark-red", "navy", "orange"], "effect": "Natural & Chic"},
+    "gray": {"colors": ["dark-red", "purple"], "effect": "Balanced & Modern"},
+    "khaki": {"colors": ["dark-red", "mustard", "black"], "effect": "Comfortable & Urban"},
+    "jeans": {"colors": "any", "effect": "Versatile (Joker Piece)"}
+}
+
+COLOR_HARMONY_GUIDE = """
+- Monochromatic: Different tones of the same color (e.g., navy blue + ice blue).
+- Analogous: Colors that are next to each other on the color wheel (e.g., red and orange).
+- Complementary: Colors that are opposite each other (e.g., navy and orange, red and green).
+"""
+
+GENERAL_STYLE_PRINCIPLES = """
+- Fit is Key: Clothes should fit well—not too tight, not too loose.
+- Prioritize Timeless Pieces: Classic items like a white shirt, blazer, or classic trousers are always a good choice.
+- Layering is Stylish: Encourage combinations like a t-shirt under a shirt and a jacket on top.
+- Harmonize Accessories: Ensure bag and shoes are compatible. Use accessories like scarves or watches to enrich the look.
+- Avoid Clutter: Do not use more than 3 dominant colors at once. Avoid excessive logos or patterns.
+- Seasonality: Ensure fabrics are appropriate for the weather (e.g., no wool in hot weather).
+"""
+# --- YENİ EKLENEN KURALLAR SONU ---
 
 # --- NİHAİ ve AKILLI: ESNEK KOMBİN ŞABLONLARI ve YASAKLI KATEGORİLER ---
-
 OCCASION_REQUIREMENTS_FEMALE = {
-    # === İŞ & PROFESYONEL ===
+    # ... (Mevcut OCCASION_REQUIREMENTS_FEMALE yapınız burada kalacak)
     "office-day": {
         "valid_structures": [
-            {"top": {"blouse", "shirt", "sweater"}, "bottom": {"trousers", "skirt"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers", "boots"}},
+            {"top": {"blouse", "shirt", "sweater"}, "bottom": {"trousers", "mini-skirt", "midi-skirt", "long-skirt"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers", "boots"}},
             {"one-piece": {"casual-dress", "jumpsuit"}, "outerwear": {"blazer", "cardigan"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers"}}
         ],
         "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "crop-top"}
@@ -45,8 +70,6 @@ OCCASION_REQUIREMENTS_FEMALE = {
         ],
         "forbidden_categories": {"jeans", "sneakers", "t-shirt", "sweatshirt"}
     },
-
-    # === KUTLAMA & RESMİ ===
     "celebration": {
         "valid_structures": [
             {"one-piece": {"evening-dress", "jumpsuit", "casual-dress"}, "shoes": {"heels", "sandals", "sneakers", "flats"}},
@@ -67,8 +90,6 @@ OCCASION_REQUIREMENTS_FEMALE = {
         ],
         "forbidden_categories": {"sneakers", "boots", "jeans", "t-shirt"}
     },
-
-    # === AKTİF & SPOR ===
     "yoga-pilates": {
         "valid_structures": [
             {"top": {"tank-top", "bralette", "t-shirt"}, "bottom": {"leggings", "track-bottom"}}
@@ -84,7 +105,7 @@ OCCASION_REQUIREMENTS_FEMALE = {
 }
 
 OCCASION_REQUIREMENTS_MALE = {
-    # === İŞ & PROFESYONEL ===
+    # ... (Mevcut OCCASION_REQUIREMENTS_MALE yapınız burada kalacak)
     "office-day": {
         "valid_structures": [
             {"top": {"shirt", "polo-shirt", "sweater"}, "bottom": {"trousers", "suit-trousers"}, "shoes": {"classic-shoes", "loafers", "sneakers", "boots"}}
@@ -97,8 +118,6 @@ OCCASION_REQUIREMENTS_MALE = {
         ],
         "forbidden_categories": {"jeans", "sneakers", "t-shirt", "polo-shirt"}
     },
-
-    # === KUTLAMA & RESMİ ===
     "celebration": {
         "valid_structures": [
             {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "jeans"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "sneakers", "boots"}}
@@ -117,8 +136,6 @@ OCCASION_REQUIREMENTS_MALE = {
         ],
         "forbidden_categories": {"sneakers", "boots", "jeans", "polo-shirt", "t-shirt"}
     },
-    
-    # === AKTİF & SPOR ===
     "yoga-pilates": {
         "valid_structures": [
             {"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}}
@@ -132,6 +149,7 @@ OCCASION_REQUIREMENTS_MALE = {
         "forbidden_categories": {"jeans", "shirt", "classic-shoes", "boots"}
     }
 }
+
 
 class GPTLoadBalancer:
     def __init__(self): self.primary_failures, self.secondary_failures, self.last_primary_use, self.last_secondary_use, self.max_failures, self.failure_reset_time = 0, 0, 0, 0, 3, 300
@@ -152,45 +170,35 @@ class GPTLoadBalancer:
 gpt_balancer = GPTLoadBalancer()
 
 class AdvancedOutfitEngine:
-    """NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
+    """AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
     
     def check_wardrobe_compatibility(self, occasion: str, wardrobe: List[OptimizedClothingItem], gender: str):
-        """
-        NİHAİ VERSİYON: Gardırobun, etkinlik için tanımlanmış ESNEK KOMBİN ŞABLONLARINDAN
-        en az birini karşılayıp karşılamadığını kontrol eder.
-        """
+        """Gardırobun, etkinlik için tanımlanmış ESNEK KOMBİN ŞABLONLARINDAN en az birini karşılayıp karşılamadığını kontrol eder."""
         requirements_map = OCCASION_REQUIREMENTS_MALE if gender == 'male' else OCCASION_REQUIREMENTS_FEMALE
         
         if occasion not in requirements_map:
-            return  # Bu etkinlik için özel bir kural yoksa, kontrolden geç
+            return
 
         occasion_rules = requirements_map[occasion]
         valid_structures = occasion_rules.get("valid_structures", [])
         wardrobe_categories = {item.category for item in wardrobe}
         
-        # Eğer etkinlik için hiçbir geçerli yapı tanımlanmamışsa, kontrolden geç
         if not valid_structures:
             return
 
-        # Tanımlanmış geçerli şablonlardan en az BİRİ oluşturulabiliyor mu?
         can_create_any_structure = False
         for structure in valid_structures:
-            # Bu şablonun gerektirdiği tüm gruplar (top, bottom vb.) gardıropta var mı?
             is_this_structure_possible = True
             for group, required_cats in structure.items():
                 if not wardrobe_categories.intersection(required_cats):
-                    # Bu grup için gardıropta eşleşen kategori yok, bu şablon oluşturulamaz.
                     is_this_structure_possible = False
-                    break  # Bu şablonu kontrol etmeyi bırak, sonrakine geç.
+                    break
             
             if is_this_structure_possible:
-                # Harika! Gardırop bu şablonu oluşturabiliyor. Kontrol başarılı.
                 can_create_any_structure = True
-                break # Ana döngüden çık.
+                break
 
-        # Eğer tüm şablonlar denendi ve HİÇBİRİ oluşturulamıyorsa, o zaman hata ver.
         if not can_create_any_structure:
-            # Kullanıcıya yol göstermek için tüm olası kategorileri toplayıp gösterelim.
             all_possible_categories = set()
             for structure in valid_structures:
                 for cats in structure.values():
@@ -202,123 +210,27 @@ class AdvancedOutfitEngine:
                 f"Please add appropriate items like: {missing_types}."
             )
             raise HTTPException(status_code=422, detail=error_detail)
-        """
-        NİHAİ VERSİYON: Gardırobun, etkinlik için gerekli KATEGORİ GRUPLARINA sahip olup olmadığını kontrol eder.
-        """
-        requirements_map = OCCASION_REQUIREMENTS_MALE if gender == 'male' else OCCASION_REQUIREMENTS_FEMALE
-        
-        if occasion not in requirements_map:
-            return # Bu etkinlik için bir kural yoksa geç
-
-        required_groups = requirements_map[occasion]
-        wardrobe_categories = {item.category for item in wardrobe}
-        
-        # Eğer 'one-piece' kuralı varsa, onu öncelikli kontrol et
-        if 'one-piece' in required_groups:
-            # Hem 'one-piece' hem de gerekli 'shoes' var mı?
-            has_one_piece = bool(wardrobe_categories.intersection(required_groups['one-piece']))
-            has_shoes = bool(wardrobe_categories.intersection(required_groups.get('shoes', set())))
-            # Eğer geçerli bir 'one-piece' kombinasyonu varsa, kontrolden geç
-            if has_one_piece and has_shoes:
-                return
-
-        # Standart grup kontrolü: Gerekli her gruptan en az bir parça var mı?
-        all_groups_satisfied = True
-        all_missing_categories = set()
-
-        for group, categories_in_group in required_groups.items():
-            # 'one-piece' zaten kontrol edildi, atla.
-            if group == 'one-piece': continue
-
-            # Gardıropta bu gruptan bir ürün var mı?
-            if not wardrobe_categories.intersection(categories_in_group):
-                all_groups_satisfied = False
-                # Eksik olan tüm kategorileri biriktir
-                all_missing_categories.update(categories_in_group)
-
-        # Eğer tüm gruplar (top, bottom, shoes vb.) karşılanıyorsa, kontrolden geç
-        if all_groups_satisfied:
-            return
-
-        # Eğer buraya ulaştıysak, gardırop yetersizdir. Hata fırlat.
-        if all_missing_categories:
-            missing_types = ", ".join(sorted(list(all_missing_categories)))
-            error_detail = (
-                f"Your wardrobe is not suitable for '{occasion}'. "
-                f"Please add items like: {missing_types}."
-            )
-            raise HTTPException(status_code=422, detail=error_detail)
-        """
-        Verilen etkinlik ve CİNSİYET için gardırobun uygun olup olmadığını kontrol eder.
-        'unisex' durumunda erkek ve kadın kurallarını dinamik olarak birleştirir.
-        """
-        required_categories = set()
-
-        # Adım 1: Cinsiyete göre doğru kural setini belirle
-        if gender == 'male':
-            # Sadece erkek kurallarını kullan
-            requirements_map = OCCASION_REQUIREMENTS_MALE
-            if occasion in requirements_map:
-                required_categories = requirements_map[occasion]
-
-        elif gender == 'female':
-            # Sadece kadın kurallarını kullan
-            requirements_map = OCCASION_REQUIREMENTS_FEMALE
-            if occasion in requirements_map:
-                required_categories = requirements_map[occasion]
-        
-        else:  # Bu blok 'unisex' ve tanımsız diğer tüm durumları yakalar
-            # Hem erkek hem de kadın listesinden kuralları güvenli bir şekilde al
-            male_reqs = OCCASION_REQUIREMENTS_MALE.get(occasion, set())
-            female_reqs = OCCASION_REQUIREMENTS_FEMALE.get(occasion, set())
-            
-            # İki kural setini birleştir (Python'da set'ler için birleşim operatörü '|')
-            required_categories = male_reqs | female_reqs
-
-        # Adım 2: Kontrolü yap
-        # Eğer bu etkinlik için hiçbir kural tanımlanmamışsa, kontrolden geç
-        if not required_categories:
-            return
-
-        wardrobe_categories = {item.category for item in wardrobe}
-
-        if not wardrobe_categories.intersection(required_categories):
-            # Hata mesajının her zaman aynı sırada olması için sıralama ekledim (testler için iyi)
-            missing_types = ", ".join(sorted(list(required_categories)))
-            
-            error_detail = (
-                f"Your wardrobe does not have suitable items for '{occasion}'. "
-                f"Please add items like: {missing_types}."
-            )
-            raise HTTPException(status_code=422, detail=error_detail)
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
 
     def create_advanced_prompt(self, request: OutfitRequest, recent_outfits: List[List[str]]) -> str:
-        """NİHAİ PROMPT: Token açısından verimli ve son kombinleri 'set' olarak dikkate alan prompt."""
+        """Stil ve Renk kuralları ile zenginleştirilmiş NİHAİ PROMPT."""
         lang_code, gender = request.language, request.gender
         target_language = localization.LANGUAGE_NAMES.get(lang_code, "English")
         en_occasions = localization.get_translation('en', 'occasions')
         occasion_text = en_occasions.get(request.occasion, request.occasion.replace('-', ' '))
 
-        # --- YENİ MANTIK: Harita dizisini (array of maps) işle ---
         avoid_combos_str = ""
         if recent_outfits:
-            combo_lines = []
-            for i, outfit_map in enumerate(recent_outfits):
-                # Her haritanın içinden 'items' listesini güvenli bir şekilde al.
-                outfit_ids = outfit_map.get('items', [])
-                if outfit_ids:
-                    combo_lines.append(f"- Combo {i+1}: {', '.join(outfit_ids)}")
-            
-            if combo_lines:
-                avoid_combos_str = "\n".join(combo_lines)
-            else:
-                avoid_combos_str = "None"
+            combo_lines = [f"- Combo {i+1}: {', '.join(outfit_map.get('items', []))}" for i, outfit_map in enumerate(recent_outfits) if outfit_map.get('items')]
+            avoid_combos_str = "\n".join(combo_lines) if combo_lines else "None"
         else:
             avoid_combos_str = "None"
-        # --- YENİ MANTIK SONU ---
+            
+        # Dinamik olarak popüler renk kombinasyonlarını metne çevir
+        popular_combos_text = "\n".join([f"- For a '{details['effect']}' look, combine '{color.capitalize()}' with: {', '.join(details['colors'])}." for color, details in POPULAR_COLOR_COMBINATIONS.items() if details['colors'] != "any"])
+        popular_combos_text += "\n- Denim Blue is a 'Joker' (versatile) piece and works with almost any color."
 
         pinterest_instructions = ""
         if request.plan == "premium":
@@ -338,7 +250,7 @@ class AdvancedOutfitEngine:
         ]'''
 
         prompt = f"""
-You are an expert fashion stylist. Create a complete {gender} outfit for the occasion: '{occasion_text}'. The weather is {request.weather_condition}.
+You are an expert fashion stylist. Create a complete and stylish {gender} outfit for the occasion: '{occasion_text}'. The weather is {request.weather_condition}.
 
 CRITICAL LANGUAGE REQUIREMENT:
 - You MUST write all descriptive fields ("description", "suggestion_tip", and "title" for Pinterest) in {target_language}.
@@ -356,6 +268,17 @@ CRITICAL FASHION LOGIC:
 - Ensure the styles of the selected items are cohesive and logical for the occasion.
 - Avoid selecting multiple items from the same core category (e.g., do not choose two different tops or two different trousers for one outfit).
 
+--- NEW GUIDELINES ---
+GENERAL STYLE PRINCIPLES:
+{GENERAL_STYLE_PRINCIPLES}
+
+COLOR HARMONY GUIDE:
+- For a guaranteed stylish result, strongly prefer these proven color combinations:
+{popular_combos_text}
+- If those aren't possible, you can use these general principles:
+{COLOR_HARMONY_GUIDE}
+--- END OF NEW GUIDELINES ---
+
 REQUIREMENTS:
 - Use ONLY the exact item IDs from the database below.
 - Keep "description" and "suggestion_tip" concise (1-2 sentences).
@@ -367,8 +290,8 @@ ITEM DATABASE:
 JSON RESPONSE STRUCTURE:
 {{
     "items": [{{"id": "item_id_from_database", "name": "Creative Name in {target_language}", "category": "actual_category_from_database"}}],
-    "description": "A complete outfit description in {target_language}.",
-    "suggestion_tip": "A practical styling tip in {target_language}."
+    "description": "A complete outfit description in {target_language} that explains the style choices.",
+    "suggestion_tip": "A practical styling tip in {target_language} based on the new style principles."
     {pinterest_instructions}
 }}
 """
@@ -380,9 +303,6 @@ JSON RESPONSE STRUCTURE:
         return [SuggestedItem(**item) for item in items_from_ai if isinstance(item, dict) and item.get("id") in wardrobe_map]
 
     def standardize_terminology(self, text: str, lang_code: str) -> str:
-        # Bu fonksiyon, AI'dan gelen dildeki genel terimleri (örn: "açık mavi")
-        # bizim standartlarımıza (örn: "Buz Mavisi") çevirmek için kullanılabilir.
-        # Şimdilik, AI'ın doğrudan doğru dili kullandığını varsayıyoruz.
         return text
 
     def translate_pinterest_query(self, query: str, lang_code: str) -> str:
@@ -406,25 +326,19 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     
     user_data = user_doc.to_dict()
     plan = user_data.get("plan", "free")
-    
-    # --- YENİ EKLENDİ: Son kombinleri Firestore'dan oku ---
-    # Eğer 'recent_outfits' alanı yoksa, boş bir liste olarak kabul et.
     recent_outfits = user_data.get("recent_outfits", [])
-    # --- YENİ KOD SONU ---
     
     usage_data = user_data.get("usage", {})
     if usage_data.get("date") != today: 
         usage_data = {"count": 0, "date": today, "rewarded_count": 0}
         user_ref.update({"usage": usage_data})
     
-    # --- GÜNCELLENDİ: Dönen veriye 'recent_outfits' eklendi ---
     user_info = {
         "user_id": user_id, 
-        "gender": user_data.get("gender", "unisex"), # 'unisex' varsayılan olarak eklendi
+        "gender": user_data.get("gender", "unisex"),
         "plan": plan,
         "recent_outfits": recent_outfits
     }
-    # --- GÜNCELLEME SONU ---
     
     if plan == "premium": 
         return user_info
@@ -439,7 +353,7 @@ async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_
     return user_info
 
 async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> str:
-    config = {"free": {"max_tokens": 800, "temperature": 0.75}, "premium": {"max_tokens": 1200, "temperature": 0.75}}
+    config = {"free": {"max_tokens": 900, "temperature": 0.7}, "premium": {"max_tokens": 1300, "temperature": 0.7}}
     gpt_config = config.get(plan, config["free"])
     for attempt in range(max_retries + 1):
         client, client_type = gpt_balancer.get_available_client()
@@ -458,30 +372,23 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
-        # 1. Gardırop uygunluğunu yeni akıllı ve esnek fonksiyonla kontrol et
         outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
 
-        # 2. GPT'nin hata yapmasını önlemek için yasaklı kategorileri filtrele
         requirements_map = OCCASION_REQUIREMENTS_MALE if user_info["gender"] == 'male' else OCCASION_REQUIREMENTS_FEMALE
         occasion_rules = requirements_map.get(request.occasion, {})
         forbidden_categories = occasion_rules.get("forbidden_categories", set())
         
         filtered_wardrobe = [item for item in request.wardrobe if item.category not in forbidden_categories]
-        
-        # Eğer filtreleme sonrası gardırop boş kalırsa, orijinal listeyi kullan (güvenlik önlemi)
         request.wardrobe = filtered_wardrobe if filtered_wardrobe else request.wardrobe
 
         if not request.wardrobe: 
             raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
         
-        # 3. GPT'ye gönderilecek prompt'u, son kombinleri de içerecek şekilde oluştur
         prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
         
-        # 4. GPT'yi çağır
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
         
-        # 5. Gelen yanıtı doğrula
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
         if not final_items: 
             raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
@@ -499,7 +406,6 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                     final_pinterest_links.append(PinterestLink(title=link_idea.get("title", "Inspiration"), url=f"https://www.pinterest.com/search/pins/?q={encoded_query}"))
             response_data["pinterest_links"] = final_pinterest_links
 
-        # 6. Yeni kombini Firestore'a hatasız formatta kaydet
         new_outfit_ids = sorted([item.id for item in final_items])
         new_outfit_map = {"items": new_outfit_ids}
         
@@ -509,7 +415,7 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         
         if not is_duplicate:
             updated_outfits = [new_outfit_map] + existing_outfits
-            trimmed_outfits = updated_outfits[:3]
+            trimmed_outfits = updated_outfits[:5] # Son 5 kombini tut
         else:
             trimmed_outfits = existing_outfits
 
@@ -526,14 +432,18 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
     except Exception as e:
         print(f"❌ Outfit suggestion error: {traceback.format_exc()}"); raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
 
+# ... (dosyanın geri kalanı - get_usage_status ve get_gpt_status - değişmeden kalır)
 @router.get("/usage-status", tags=["users"])
 async def get_usage_status(user_id: str = Depends(get_current_user_id)):
     try:
         user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get();
         if not user_doc.exists: raise HTTPException(status_code=404, detail="User not found")
-        user_data, plan, today = user_doc.to_dict(), user_data.get("plan", "free"), str(date.today())
-        usage_data = user_data.get("usage", {}); current_usage = usage_data.get("count", 0) if usage_data.get("date") == today else 0
+        user_data = user_doc.to_dict()
+        plan = user_data.get("plan", "free")
+        today = str(date.today())
+        usage_data = user_data.get("usage", {}); 
+        current_usage = usage_data.get("count", 0) if usage_data.get("date") == today else 0
         rewarded_count = usage_data.get("rewarded_count", 0) if usage_data.get("date") == today else 0
         daily_limit = PLAN_LIMITS.get(plan)
         is_unlimited = plan == 'premium'
