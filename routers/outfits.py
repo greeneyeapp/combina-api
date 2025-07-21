@@ -385,46 +385,61 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         if not request.wardrobe:
             raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
         
-        # --- AI Çağrısı ve Yanıt İşleme ---
-        prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
-        response_content = await call_gpt_with_retry(prompt, user_info["plan"])
-        ai_response = json.loads(response_content)
-        
-        final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
-        if not final_items:
-            raise HTTPException(status_code=500, detail="AI failed to create a valid outfit structure.")
+        # --- OTOMATİK TEKRAR DENEME DÖNGÜSÜ ---
+        max_attempts = 3  # Sonsuz döngüye girmemek için bir sınır koyalım.
+        final_items = None
+        ai_response = None
+
+        for attempt in range(max_attempts):
+            print(f"🤖 AI outfit generation attempt {attempt + 1}/{max_attempts}...")
+            prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
             
-        # --- TEKRAR EDEN KOMBİN KONTROLÜ (GÜVENLİK HATTI) ---
-        new_outfit_ids = sorted([item.id for item in final_items])
-        existing_outfits_ids = [sorted(outfit.get("items", [])) for outfit in user_info.get("recent_outfits", [])]
+            response_content = await call_gpt_with_retry(prompt, user_info["plan"])
+            current_ai_response = json.loads(response_content)
+            
+            validated_items = outfit_engine.validate_outfit_structure(current_ai_response.get("items", []), request.wardrobe)
+            
+            if not validated_items:
+                print("⚠️ AI did not return a valid structure, retrying...")
+                continue # Geçerli bir yapı dönmezse bir sonraki denemeye geç.
 
-        if new_outfit_ids in existing_outfits_ids:
-            print("❌ AI suggested a repeated outfit. Failing request to protect user experience.")
-            raise HTTPException(
-                status_code=508, # Loop Detected
-                detail="The AI suggested a repeated outfit. Please try again to get a new combination."
-            )
-        # --- KONTROL BLOGU SONU ---
+            new_outfit_ids = sorted([item.id for item in validated_items])
+            existing_outfits_ids = [sorted(outfit.get("items", [])) for outfit in user_info.get("recent_outfits", [])]
 
-        # --- Yanıt Hazırlama ---
+            if new_outfit_ids in existing_outfits_ids:
+                print(f"❌ AI suggested a repeated outfit on attempt {attempt + 1}. Retrying...")
+                # Eğer son deneme ise ve hala tekrar ediyorsa, o zaman hata fırlat.
+                if attempt == max_attempts - 1:
+                    raise HTTPException(status_code=500, detail="Failed to generate a unique outfit after multiple attempts.")
+                continue # Tekrar eden kombin, bir sonraki denemeye geç.
+            
+            # Başarılı ve tekrar etmeyen bir kombin bulundu!
+            final_items = validated_items
+            ai_response = current_ai_response
+            print("✅ Unique and valid outfit found!")
+            break # Döngüden çık.
+        
+        # Eğer tüm denemelere rağmen geçerli bir kombin bulunamadıysa
+        if not final_items:
+            raise HTTPException(status_code=500, detail="Failed to generate a valid outfit after multiple attempts.")
+        # --- DÖNGÜ SONU ---
+
+        # --- Yanıt Hazırlama ve Veritabanı Güncelleme ---
         description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
         suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
         
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
-            # ... (Pinterest link işleme kodunuz burada değişmeden kalır)
             final_pinterest_links = []
             for link_idea in ai_response.get("pinterest_links", []):
                 if "search_query" in link_idea and link_idea["search_query"]:
-                    translated_query = outfit_engine.translate_pinterest_query(link_idea["search_query"], request.language)
-                    encoded_query = quote(translated_query)
+                    encoded_query = quote(link_idea["search_query"]) # Çeviriye gerek yok, prompt'ta İngilizce istiyoruz
                     final_pinterest_links.append(PinterestLink(title=link_idea.get("title", "Inspiration"), url=f"https://www.pinterest.com/search/pins/?q={encoded_query}"))
             response_data["pinterest_links"] = final_pinterest_links
-
-        # --- Veritabanı Güncelleme (Sadeleştirilmiş) ---
-        new_outfit_map = {"items": new_outfit_ids}
+        
+        new_outfit_map = {"items": sorted([item.id for item in final_items])}
         updated_outfits = [new_outfit_map] + user_info.get("recent_outfits", [])
-        trimmed_outfits = updated_outfits[:5] # Son 5 kombini tut
+        trimmed_outfits = updated_outfits[:5]
 
         db.collection('users').document(user_info["user_id"]).update({
             'usage.count': firestore.Increment(1),
