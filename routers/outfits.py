@@ -27,20 +27,17 @@ PLAN_LIMITS = {"free": 2, "premium": None}
 
 OCCASION_REQUIREMENTS_FEMALE = {
     # === AKTİF & SPOR ===
-    # Bu etkinlikler için herhangi bir spor giysisi yeterlidir (VEYA mantığı)
     "gym": {"sportswear": {"leggings", "track-bottom", "athletic-shorts", "sports-bra", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"}},
     "yoga-pilates": {"sportswear": {"leggings", "track-bottom", "bralette", "tank-top", "t-shirt"}},
     "outdoor-sports": {"sportswear": {"track-bottom", "athletic-shorts", "leggings", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"}},
     "hiking": {"bottom": {"track-bottom", "leggings"}, "shoes": {"boots", "sneakers"}, "outerwear": {"raincoat", "puffer-coat"}},
 
     # === İŞ & PROFESYONEL ===
-    # Bu etkinlikler için ayrı gruplardan parçalar zorunludur (VE mantığı)
-    "office-day": {"top": {"blouse", "shirt"}, "bottom": {"trousers", "skirt", "dress-pants"}, "shoes": {"classic-shoes", "loafers", "heels"}},
-    "business-meeting": {"top": {"blazer", "shirt", "blouse"}, "bottom": {"trousers", "skirt", "dress-pants"}, "shoes": {"classic-shoes", "heels"}},
+    "office-day": {"top": {"blouse", "shirt"}, "bottom": {"trousers", "skirt"}, "shoes": {"classic-shoes", "loafers", "heels"}},
+    "business-meeting": {"top": {"blazer", "shirt", "blouse"}, "bottom": {"trousers", "skirt"}, "shoes": {"classic-shoes", "heels"}},
     "business-lunch": {"top": {"blouse", "shirt", "blazer"}, "bottom": {"trousers", "skirt", "linen-trousers"}, "shoes": {"classic-shoes", "heels", "sandals"}},
     
     # === KUTLAMA & RESMİ ===
-    # 'one-piece' veya standart 'top'+'bottom' kombinasyonu olabilir
     "wedding": {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels", "classic-shoes"}},
     "special-event": {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels"}},
     "celebration": {"one-piece": {"evening-dress", "casual-dress", "jumpsuit"}, "shoes": {"heels"}},
@@ -73,8 +70,8 @@ OCCASION_REQUIREMENTS_MALE = {
     "hiking": {"bottom": {"track-bottom"}, "shoes": {"boots", "sneakers"}, "outerwear": {"raincoat", "puffer-coat"}},
 
     # === İŞ & PROFESYONEL ===
-    "office-day": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "dress-pants"}, "shoes": {"classic-shoes", "loafers"}},
-    "business-meeting": {"top": {"shirt"}, "bottom": {"suit-trousers", "dress-pants"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes"}},
+    "office-day": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "suit-trousers"}, "shoes": {"classic-shoes", "loafers"}},
+    "business-meeting": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes"}},
     "business-lunch": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "linen-trousers"}, "shoes": {"classic-shoes", "loafers"}},
     
     # === KUTLAMA & RESMİ ===
@@ -101,7 +98,6 @@ OCCASION_REQUIREMENTS_MALE = {
     "festival": {"top": {"t-shirt", "tank-top"}, "bottom": {"denim-shorts"}, "shoes": {"boots"}},
     "sightseeing": {"top": {"t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sneakers"}}
 }
-# --- HARİTALARIN SONU ---
 
 class GPTLoadBalancer:
     def __init__(self): self.primary_failures, self.secondary_failures, self.last_primary_use, self.last_secondary_use, self.max_failures, self.failure_reset_time = 0, 0, 0, 0, 3, 300
