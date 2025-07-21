@@ -27,77 +27,81 @@ PLAN_LIMITS = {"free": 2, "premium": None}
 
 OCCASION_REQUIREMENTS_FEMALE = {
     # === AKTİF & SPOR ===
-    "gym": {"leggings", "track-bottom", "athletic-shorts", "sports-bra", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"},
-    "yoga-pilates": {"leggings", "track-bottom", "bralette", "tank-top", "t-shirt"},
-    "outdoor-sports": {"track-bottom", "athletic-shorts", "leggings", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"},
-    "hiking": {"track-bottom", "leggings", "boots", "sneakers", "raincoat", "puffer-coat", "backpack"},
+    # Bu etkinlikler için herhangi bir spor giysisi yeterlidir (VEYA mantığı)
+    "gym": {"sportswear": {"leggings", "track-bottom", "athletic-shorts", "sports-bra", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"}},
+    "yoga-pilates": {"sportswear": {"leggings", "track-bottom", "bralette", "tank-top", "t-shirt"}},
+    "outdoor-sports": {"sportswear": {"track-bottom", "athletic-shorts", "leggings", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"}},
+    "hiking": {"bottom": {"track-bottom", "leggings"}, "shoes": {"boots", "sneakers"}, "outerwear": {"raincoat", "puffer-coat"}},
 
     # === İŞ & PROFESYONEL ===
-    "office-day": {"trousers", "blouse", "shirt", "blazer", "skirt", "classic-shoes", "loafers", "dress-pants", "jumpsuit"},
-    "business-meeting": {"blazer", "shirt", "blouse", "trousers", "skirt", "classic-shoes", "heels", "dress-pants", "evening-dress"},
-    "business-lunch": {"trousers", "blouse", "shirt", "blazer", "casual-dress", "classic-shoes", "dress-pants", "linen-trousers"},
+    # Bu etkinlikler için ayrı gruplardan parçalar zorunludur (VE mantığı)
+    "office-day": {"top": {"blouse", "shirt"}, "bottom": {"trousers", "skirt", "dress-pants"}, "shoes": {"classic-shoes", "loafers", "heels"}},
+    "business-meeting": {"top": {"blazer", "shirt", "blouse"}, "bottom": {"trousers", "skirt", "dress-pants"}, "shoes": {"classic-shoes", "heels"}},
+    "business-lunch": {"top": {"blouse", "shirt", "blazer"}, "bottom": {"trousers", "skirt", "linen-trousers"}, "shoes": {"classic-shoes", "heels", "sandals"}},
     
     # === KUTLAMA & RESMİ ===
-    "wedding": {"evening-dress", "jumpsuit", "heels", "classic-shoes", "blouse", "skirt"},
-    "special-event": {"evening-dress", "jumpsuit", "heels", "blazer"},
-    "celebration": {"evening-dress", "casual-dress", "jumpsuit", "heels", "blouse", "trousers"},
-    "formal-dinner": {"evening-dress", "jumpsuit", "heels", "blazer", "trousers"},
+    # 'one-piece' veya standart 'top'+'bottom' kombinasyonu olabilir
+    "wedding": {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels", "classic-shoes"}},
+    "special-event": {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels"}},
+    "celebration": {"one-piece": {"evening-dress", "casual-dress", "jumpsuit"}, "shoes": {"heels"}},
+    "formal-dinner": {"one-piece": {"evening-dress", "jumpsuit"}, "top": {"blouse", "blazer"}, "bottom": {"trousers"}, "shoes": {"heels"}},
 
     # === GÜNLÜK & SOSYAL ===
-    "daily-errands": {"jeans", "t-shirt", "sweatshirt", "sneakers", "leggings"},
-    "shopping": {"jeans", "t-shirt", "sneakers", "casual-dress", "cardigan"},
-    "house-party": {"jeans", "blouse", "casual-dress", "sneakers", "t-shirt"},
-    "date-night": {"casual-dress", "evening-dress", "jeans", "blouse", "heels", "shirt", "skirt"},
-    "brunch": {"casual-dress", "jeans", "blouse", "skirt", "sandals", "t-shirt"},
-    "friends-gathering": {"jeans", "t-shirt", "sweatshirt", "sneakers", "casual-dress"},
-    "cinema": {"jeans", "hoodie", "t-shirt", "sneakers"},
-    "concert": {"jeans", "t-shirt", "boots", "denim-jacket", "leather-jacket"},
-    "cafe": {"jeans", "t-shirt", "cardigan", "sneakers", "blouse"},
+    "daily-errands": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "leggings"}, "shoes": {"sneakers"}},
+    "shopping": {"top": {"t-shirt", "blouse"}, "bottom": {"jeans", "skirt"}, "shoes": {"sneakers", "sandals"}},
+    "house-party": {"top": {"blouse", "t-shirt", "crop-top"}, "bottom": {"jeans", "skirt"}, "shoes": {"sneakers", "boots"}},
+    "date-night": {"one-piece": {"casual-dress", "evening-dress"}, "top": {"blouse", "shirt"}, "bottom": {"jeans", "skirt"}, "shoes": {"heels", "boots"}},
+    "brunch": {"one-piece": {"casual-dress"}, "top": {"blouse", "t-shirt"}, "bottom": {"jeans", "skirt"}, "shoes": {"sandals", "sneakers"}},
+    "friends-gathering": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
+    "cinema": {"top": {"hoodie", "t-shirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
+    "concert": {"top": {"t-shirt", "crop-top"}, "bottom": {"jeans", "denim-shorts"}, "outerwear": {"denim-jacket", "leather-jacket"}, "shoes": {"boots", "sneakers"}},
+    "cafe": {"top": {"cardigan", "blouse", "t-shirt"}, "bottom": {"jeans", "skirt"}, "shoes": {"sneakers", "loafers"}},
     
     # === SEYAHAT & ÖZEL ===
-    "travel": {"jeans", "t-shirt", "sweatshirt", "sneakers", "backpack", "track-bottom"},
-    "weekend-getaway": {"jeans", "casual-dress", "sneakers", "cardigan", "t-shirt"},
-    "holiday": {"sandals", "fabric-shorts", "casual-dress", "tank-top", "sunglasses"},
-    "festival": {"denim-shorts", "boots", "t-shirt", "crop-top", "denim-jacket"},
-    "sightseeing": {"sneakers", "jeans", "t-shirt", "crossbody-bag", "hat"}
+    "travel": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
+    "weekend-getaway": {"top": {"t-shirt", "cardigan"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
+    "holiday": {"top": {"tank-top", "t-shirt"}, "bottom": {"fabric-shorts", "skirt"}, "shoes": {"sandals"}},
+    "festival": {"top": {"crop-top", "t-shirt", "tank-top"}, "bottom": {"denim-shorts"}, "shoes": {"boots"}},
+    "sightseeing": {"top": {"t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sneakers"}}
 }
 
 OCCASION_REQUIREMENTS_MALE = {
     # === AKTİF & SPOR ===
-    "gym": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"},
-    "yoga-pilates": {"track-bottom", "athletic-shorts", "t-shirt", "tank-top"},
-    "outdoor-sports": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"},
-    "hiking": {"track-bottom", "boots", "sneakers", "raincoat", "puffer-coat", "backpack"},
+    "gym": {"sportswear": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"}},
+    "yoga-pilates": {"sportswear": {"track-bottom", "athletic-shorts", "t-shirt", "tank-top"}},
+    "outdoor-sports": {"sportswear": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"}},
+    "hiking": {"bottom": {"track-bottom"}, "shoes": {"boots", "sneakers"}, "outerwear": {"raincoat", "puffer-coat"}},
 
     # === İŞ & PROFESYONEL ===
-    "office-day": {"trousers", "shirt", "blazer", "classic-shoes", "loafers", "suit-trousers", "dress-pants", "polo-shirt"},
-    "business-meeting": {"blazer", "shirt", "trousers", "suit-jacket", "suit-trousers", "classic-shoes", "loafers", "dress-pants"},
-    "business-lunch": {"trousers", "shirt", "blazer", "classic-shoes", "dress-pants", "linen-trousers", "polo-shirt"},
+    "office-day": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "dress-pants"}, "shoes": {"classic-shoes", "loafers"}},
+    "business-meeting": {"top": {"shirt"}, "bottom": {"suit-trousers", "dress-pants"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes"}},
+    "business-lunch": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "linen-trousers"}, "shoes": {"classic-shoes", "loafers"}},
     
     # === KUTLAMA & RESMİ ===
-    "wedding": {"suit-jacket", "suit-trousers", "tuxedo", "shirt", "classic-shoes", "tie"},
-    "special-event": {"suit-jacket", "suit-trousers", "tuxedo", "blazer", "shirt"},
-    "celebration": {"shirt", "blazer", "trousers", "jeans", "classic-shoes"},
-    "formal-dinner": {"suit-jacket", "suit-trousers", "tuxedo", "shirt", "classic-shoes"},
+    "wedding": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}},
+    "special-event": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}},
+    "celebration": {"top": {"shirt"}, "bottom": {"trousers", "jeans"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "boots"}},
+    "formal-dinner": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}},
 
     # === GÜNLÜK & SOSYAL ===
-    "daily-errands": {"jeans", "t-shirt", "sweatshirt", "sneakers", "track-bottom"},
-    "shopping": {"jeans", "t-shirt", "sneakers", "polo-shirt", "cardigan"},
-    "house-party": {"jeans", "shirt", "t-shirt", "sneakers", "polo-shirt"},
-    "date-night": {"jeans", "shirt", "blazer", "t-shirt", "boots", "classic-shoes"},
-    "brunch": {"jeans", "shirt", "polo-shirt", "sandals", "t-shirt"},
-    "friends-gathering": {"jeans", "t-shirt", "sweatshirt", "sneakers", "hoodie"},
-    "cinema": {"jeans", "hoodie", "t-shirt", "sneakers"},
-    "concert": {"jeans", "t-shirt", "boots", "denim-jacket", "leather-jacket"},
-    "cafe": {"jeans", "t-shirt", "cardigan", "sneakers", "shirt"},
+    "daily-errands": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
+    "shopping": {"top": {"t-shirt", "polo-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
+    "house-party": {"top": {"shirt", "t-shirt", "polo-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
+    "date-night": {"top": {"shirt", "t-shirt"}, "bottom": {"jeans", "trousers"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "boots"}},
+    "brunch": {"top": {"shirt", "polo-shirt", "t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sandals", "sneakers"}},
+    "friends-gathering": {"top": {"t-shirt", "sweatshirt", "hoodie"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
+    "cinema": {"top": {"hoodie", "t-shirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
+    "concert": {"top": {"t-shirt"}, "bottom": {"jeans"}, "outerwear": {"denim-jacket", "leather-jacket"}, "shoes": {"boots"}},
+    "cafe": {"top": {"shirt", "cardigan", "t-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers", "loafers"}},
     
     # === SEYAHAT & ÖZEL ===
-    "travel": {"jeans", "t-shirt", "sweatshirt", "sneakers", "backpack", "track-bottom"},
-    "weekend-getaway": {"jeans", "sneakers", "cardigan", "t-shirt", "polo-shirt"},
-    "holiday": {"fabric-shorts", "t-shirt", "sandals", "polo-shirt", "sunglasses"},
-    "festival": {"denim-shorts", "boots", "t-shirt", "tank-top", "denim-jacket"},
-    "sightseeing": {"sneakers", "jeans", "t-shirt", "crossbody-bag", "hat"}
+    "travel": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
+    "weekend-getaway": {"top": {"t-shirt", "polo-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
+    "holiday": {"top": {"t-shirt", "polo-shirt", "tank-top"}, "bottom": {"fabric-shorts"}, "shoes": {"sandals"}},
+    "festival": {"top": {"t-shirt", "tank-top"}, "bottom": {"denim-shorts"}, "shoes": {"boots"}},
+    "sightseeing": {"top": {"t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sneakers"}}
 }
+# --- HARİTALARIN SONU ---
 
 class GPTLoadBalancer:
     def __init__(self): self.primary_failures, self.secondary_failures, self.last_primary_use, self.last_secondary_use, self.max_failures, self.failure_reset_time = 0, 0, 0, 0, 3, 300
@@ -121,6 +125,52 @@ class AdvancedOutfitEngine:
     """NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
     
     def check_wardrobe_compatibility(self, occasion: str, wardrobe: List[OptimizedClothingItem], gender: str):
+        """
+        NİHAİ VERSİYON: Gardırobun, etkinlik için gerekli KATEGORİ GRUPLARINA sahip olup olmadığını kontrol eder.
+        """
+        requirements_map = OCCASION_REQUIREMENTS_MALE if gender == 'male' else OCCASION_REQUIREMENTS_FEMALE
+        
+        if occasion not in requirements_map:
+            return # Bu etkinlik için bir kural yoksa geç
+
+        required_groups = requirements_map[occasion]
+        wardrobe_categories = {item.category for item in wardrobe}
+        
+        # Eğer 'one-piece' kuralı varsa, onu öncelikli kontrol et
+        if 'one-piece' in required_groups:
+            # Hem 'one-piece' hem de gerekli 'shoes' var mı?
+            has_one_piece = bool(wardrobe_categories.intersection(required_groups['one-piece']))
+            has_shoes = bool(wardrobe_categories.intersection(required_groups.get('shoes', set())))
+            # Eğer geçerli bir 'one-piece' kombinasyonu varsa, kontrolden geç
+            if has_one_piece and has_shoes:
+                return
+
+        # Standart grup kontrolü: Gerekli her gruptan en az bir parça var mı?
+        all_groups_satisfied = True
+        all_missing_categories = set()
+
+        for group, categories_in_group in required_groups.items():
+            # 'one-piece' zaten kontrol edildi, atla.
+            if group == 'one-piece': continue
+
+            # Gardıropta bu gruptan bir ürün var mı?
+            if not wardrobe_categories.intersection(categories_in_group):
+                all_groups_satisfied = False
+                # Eksik olan tüm kategorileri biriktir
+                all_missing_categories.update(categories_in_group)
+
+        # Eğer tüm gruplar (top, bottom, shoes vb.) karşılanıyorsa, kontrolden geç
+        if all_groups_satisfied:
+            return
+
+        # Eğer buraya ulaştıysak, gardırop yetersizdir. Hata fırlat.
+        if all_missing_categories:
+            missing_types = ", ".join(sorted(list(all_missing_categories)))
+            error_detail = (
+                f"Your wardrobe is not suitable for '{occasion}'. "
+                f"Please add items like: {missing_types}."
+            )
+            raise HTTPException(status_code=422, detail=error_detail)
         """
         Verilen etkinlik ve CİNSİYET için gardırobun uygun olup olmadığını kontrol eder.
         'unisex' durumunda erkek ve kadın kurallarını dinamik olarak birleştirir.
