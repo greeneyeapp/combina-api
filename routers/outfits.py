@@ -374,6 +374,7 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
     try:
         outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
 
+        # --- Gardırop Filtreleme ---
         requirements_map = OCCASION_REQUIREMENTS_MALE if user_info["gender"] == 'male' else OCCASION_REQUIREMENTS_FEMALE
         occasion_rules = requirements_map.get(request.occasion, {})
         forbidden_categories = occasion_rules.get("forbidden_categories", set())
@@ -381,23 +382,37 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         filtered_wardrobe = [item for item in request.wardrobe if item.category not in forbidden_categories]
         request.wardrobe = filtered_wardrobe if filtered_wardrobe else request.wardrobe
 
-        if not request.wardrobe: 
+        if not request.wardrobe:
             raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
         
+        # --- AI Çağrısı ve Yanıt İşleme ---
         prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
-        
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
         
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
-        if not final_items: 
-            raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
-        
+        if not final_items:
+            raise HTTPException(status_code=500, detail="AI failed to create a valid outfit structure.")
+            
+        # --- TEKRAR EDEN KOMBİN KONTROLÜ (GÜVENLİK HATTI) ---
+        new_outfit_ids = sorted([item.id for item in final_items])
+        existing_outfits_ids = [sorted(outfit.get("items", [])) for outfit in user_info.get("recent_outfits", [])]
+
+        if new_outfit_ids in existing_outfits_ids:
+            print("❌ AI suggested a repeated outfit. Failing request to protect user experience.")
+            raise HTTPException(
+                status_code=508, # Loop Detected
+                detail="The AI suggested a repeated outfit. Please try again to get a new combination."
+            )
+        # --- KONTROL BLOGU SONU ---
+
+        # --- Yanıt Hazırlama ---
         description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
         suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
         
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
+            # ... (Pinterest link işleme kodunuz burada değişmeden kalır)
             final_pinterest_links = []
             for link_idea in ai_response.get("pinterest_links", []):
                 if "search_query" in link_idea and link_idea["search_query"]:
@@ -406,18 +421,10 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                     final_pinterest_links.append(PinterestLink(title=link_idea.get("title", "Inspiration"), url=f"https://www.pinterest.com/search/pins/?q={encoded_query}"))
             response_data["pinterest_links"] = final_pinterest_links
 
-        new_outfit_ids = sorted([item.id for item in final_items])
+        # --- Veritabanı Güncelleme (Sadeleştirilmiş) ---
         new_outfit_map = {"items": new_outfit_ids}
-        
-        existing_outfits = user_info.get("recent_outfits", [])
-        
-        is_duplicate = any(sorted(existing_outfit.get("items", [])) == new_outfit_ids for existing_outfit in existing_outfits)
-        
-        if not is_duplicate:
-            updated_outfits = [new_outfit_map] + existing_outfits
-            trimmed_outfits = updated_outfits[:5] # Son 5 kombini tut
-        else:
-            trimmed_outfits = existing_outfits
+        updated_outfits = [new_outfit_map] + user_info.get("recent_outfits", [])
+        trimmed_outfits = updated_outfits[:5] # Son 5 kombini tut
 
         db.collection('users').document(user_info["user_id"]).update({
             'usage.count': firestore.Increment(1),
@@ -427,10 +434,13 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         print(f"✅ Outfit suggestion created and provided in '{request.language}' for {user_info['plan']} user")
         return OutfitResponse(**response_data)
         
-    except json.JSONDecodeError: raise HTTPException(status_code=502, detail="Failed to parse AI response.")
-    except HTTPException: raise
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Failed to parse AI response.")
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ Outfit suggestion error: {traceback.format_exc()}"); raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+        print(f"❌ Outfit suggestion error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
 
 # ... (dosyanın geri kalanı - get_usage_status ve get_gpt_status - değişmeden kalır)
 @router.get("/usage-status", tags=["users"])
