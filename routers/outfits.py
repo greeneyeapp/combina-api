@@ -111,7 +111,9 @@ class AdvancedOutfitEngine:
             raise HTTPException(status_code=422, detail=error_detail)
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
-        return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
+    # Daha kısa anahtarlar ve ayırıcılar kullanarak token'ları azaltıyoruz.
+    # i=id, n=name, c=category, cl=colors, st=styles
+        return "\n".join([f"i:{item.id},n:{item.name},c:{item.category},cl:{';'.join(item.colors)},st:{';'.join(item.style)}" for item in wardrobe])
 
     def create_advanced_prompt(self, request: OutfitRequest, recent_outfits: List[Dict[str, Any]]) -> str:
         lang_code, gender = request.language, request.gender
@@ -162,7 +164,7 @@ REQUIREMENTS:
 - Use ONLY the exact item IDs from the database below. Keep "description" and "suggestion_tip" concise.
 - For premium users, provide exactly THREE different Pinterest link ideas as specified in the JSON structure.
 
-ITEM DATABASE:
+ITEM DATABASE (Format: i=id, n=name, c=category, cl=colors(;-separated), st=styles(;-separated)):
 {self.create_compact_wardrobe_string(request.wardrobe)}
 
 JSON RESPONSE STRUCTURE:
