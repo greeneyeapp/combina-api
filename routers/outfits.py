@@ -121,12 +121,25 @@ class AdvancedOutfitEngine:
         avoid_combos_str = "\n".join([f"- Combo {i+1}: {', '.join(outfit_map.get('items', []))}" for i, outfit_map in enumerate(recent_outfits) if outfit_map.get('items')]) or "None"
         popular_combos_text = "\n".join([f"- For a '{details['effect']}' look, combine '{color.capitalize()}' with: {', '.join(details['colors'])}." for color, details in POPULAR_COLOR_COMBINATIONS.items() if details['colors'] != "any"])
         popular_combos_text += "\n- Denim Blue is a 'Joker' (versatile) piece and works with almost any color."
+        
         pinterest_instructions = ""
         if request.plan == "premium":
+            # GÜNCELLENDİ: Pinterest talimatları artık çok daha net ve akıllı.
             pinterest_instructions = f''',"pinterest_links": [
-            {{ "title": "A specific title in {target_language} about the exact outfit combo", "search_query": "A search query in English for the exact outfit. MUST include gender '{gender}', main item categories, and colors." }},
-            {{ "title": "A title in {target_language} on how to style ONE KEY ITEM", "search_query": "A search query in English on how to style ONE KEY ITEM from the outfit. MUST include gender '{gender}'." }},
-            {{ "title": "A general style inspiration title in {target_language} for the occasion", "search_query": "A general style search query in English for the occasion and season. MUST include gender '{gender}'." }} ]'''
+            {{
+                "title": "A specific title in {target_language} about the exact outfit combo",
+                "search_query": "A search query in English for the EXACT outfit you created. It MUST include gender ('{gender}'), the specific categories of the chosen items (e.g., 't-shirt', 'trousers', 'sneakers'), and their SPECIFIC colors (e.g., 'navy blue t-shirt black trousers white sneakers'). DO NOT use user-defined names like 'Tshirt 1'."
+            }},
+            {{
+                "title": "A title in {target_language} on how to style ONE KEY ITEM",
+                "search_query": "A search query in English on how to style ONE KEY ITEM from the outfit. Choose the most interesting item (e.g., the trousers or shoes). The query MUST use the item's generic Category and its Color. For example: 'how to style black trousers for men' or 'how to style white sneakers casual'."
+            }},
+            {{
+                "title": "A general style inspiration title in {target_language} for the occasion",
+                "search_query": "A descriptive style search query in English for the occasion ('{occasion_text}') and weather ('{request.weather_condition}'). For example: 'men's summer birthday party outfit ideas' or 'hot weather casual party style for men'."
+            }}
+        ]'''
+        
         return f"""
 You are an expert fashion stylist. Create a complete and stylish {gender} outfit for the occasion: '{occasion_text}'. The weather is {request.weather_condition}.
 CRITICAL LANGUAGE REQUIREMENT: You MUST write all descriptive fields ("description", "suggestion_tip", "title") in {target_language}.
@@ -136,7 +149,7 @@ CONTEXT:
 {avoid_combos_str}
 CRITICAL FASHION LOGIC:
 - A complete outfit must consist of either (1) a top piece AND a bottom piece, OR (2) a one-piece item.
-- DO NOT combine a top (like a t-shirt) with a dress. A dress is a standalone main item.
+- DO NOT combine a top with a dress. A dress is a standalone main item.
 - Only combine outerwear with a complete outfit. Avoid selecting multiple items from the same core category.
 --- NEW GUIDELINES ---
 GENERAL STYLE PRINCIPLES: {GENERAL_STYLE_PRINCIPLES}
@@ -146,10 +159,12 @@ COLOR HARMONY GUIDE:
 - If those aren't possible, use these general principles: {COLOR_HARMONY_GUIDE}
 --- END OF NEW GUIDELINES ---
 REQUIREMENTS:
-- Use ONLY the exact item IDs from the database below. Keep "description" and "suggestion_tip" concise (1-2 sentences).
-- For premium users, provide exactly THREE different Pinterest link ideas as specified.
+- Use ONLY the exact item IDs from the database below. Keep "description" and "suggestion_tip" concise.
+- For premium users, provide exactly THREE different Pinterest link ideas as specified in the JSON structure.
+
 ITEM DATABASE:
 {self.create_compact_wardrobe_string(request.wardrobe)}
+
 JSON RESPONSE STRUCTURE:
 {{ "items": [{{"id": "item_id", "name": "Creative Name in {target_language}", "category": "actual_category"}}], "description": "Outfit description in {target_language}.", "suggestion_tip": "Styling tip in {target_language}." {pinterest_instructions} }}"""
 
