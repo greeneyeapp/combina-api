@@ -25,78 +25,112 @@ secondary_client = OpenAI(api_key=settings.OPENAI_API_KEY2)
 db = firestore.client()
 PLAN_LIMITS = {"free": 2, "premium": None}
 
+# routers/outfits.py dosyasındaki mevcut haritaları bu nihai blokla değiştirin.
+
+# --- NİHAİ ve AKILLI: ESNEK KOMBİN ŞABLONLARI ve YASAKLI KATEGORİLER ---
+
 OCCASION_REQUIREMENTS_FEMALE = {
-    # === AKTİF & SPOR ===
-    "gym": {"sportswear": {"leggings", "track-bottom", "athletic-shorts", "sports-bra", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"}},
-    "yoga-pilates": {"sportswear": {"leggings", "track-bottom", "bralette", "tank-top", "t-shirt"}},
-    "outdoor-sports": {"sportswear": {"track-bottom", "athletic-shorts", "leggings", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"}},
-    "hiking": {"bottom": {"track-bottom", "leggings"}, "shoes": {"boots", "sneakers"}, "outerwear": {"raincoat", "puffer-coat"}},
-
     # === İŞ & PROFESYONEL ===
-    "office-day": {"top": {"blouse", "shirt"}, "bottom": {"trousers", "skirt"}, "shoes": {"classic-shoes", "loafers", "heels"}},
-    "business-meeting": {"top": {"blazer", "shirt", "blouse"}, "bottom": {"trousers", "skirt"}, "shoes": {"classic-shoes", "heels"}},
-    "business-lunch": {"top": {"blouse", "shirt", "blazer"}, "bottom": {"trousers", "skirt", "linen-trousers"}, "shoes": {"classic-shoes", "heels", "sandals"}},
-    
-    # === KUTLAMA & RESMİ ===
-    "wedding": {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels", "classic-shoes"}},
-    "special-event": {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels"}},
-    "celebration": {"one-piece": {"evening-dress", "casual-dress", "jumpsuit"}, "shoes": {"heels"}},
-    "formal-dinner": {"one-piece": {"evening-dress", "jumpsuit"}, "top": {"blouse", "blazer"}, "bottom": {"trousers"}, "shoes": {"heels"}},
+    "office-day": {
+        "valid_structures": [
+            {"top": {"blouse", "shirt", "sweater"}, "bottom": {"trousers", "skirt"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers", "boots"}},
+            {"one-piece": {"casual-dress", "jumpsuit"}, "outerwear": {"blazer", "cardigan"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers"}}
+        ],
+        "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "crop-top"}
+    },
+    "business-meeting": {
+        "valid_structures": [
+            {"top": {"blouse", "shirt"}, "bottom": {"trousers", "skirt"}, "outerwear": {"blazer", "suit-jacket"}, "shoes": {"heels", "classic-shoes"}},
+            {"one-piece": {"evening-dress"}, "outerwear": {"blazer"}, "shoes": {"heels"}}
+        ],
+        "forbidden_categories": {"jeans", "sneakers", "t-shirt", "sweatshirt"}
+    },
 
-    # === GÜNLÜK & SOSYAL ===
-    "daily-errands": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "leggings"}, "shoes": {"sneakers"}},
-    "shopping": {"top": {"t-shirt", "blouse"}, "bottom": {"jeans", "skirt"}, "shoes": {"sneakers", "sandals"}},
-    "house-party": {"top": {"blouse", "t-shirt", "crop-top"}, "bottom": {"jeans", "skirt"}, "shoes": {"sneakers", "boots"}},
-    "date-night": {"one-piece": {"casual-dress", "evening-dress"}, "top": {"blouse", "shirt"}, "bottom": {"jeans", "skirt"}, "shoes": {"heels", "boots"}},
-    "brunch": {"one-piece": {"casual-dress"}, "top": {"blouse", "t-shirt"}, "bottom": {"jeans", "skirt"}, "shoes": {"sandals", "sneakers"}},
-    "friends-gathering": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
-    "cinema": {"top": {"hoodie", "t-shirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
-    "concert": {"top": {"t-shirt", "crop-top"}, "bottom": {"jeans", "denim-shorts"}, "outerwear": {"denim-jacket", "leather-jacket"}, "shoes": {"boots", "sneakers"}},
-    "cafe": {"top": {"cardigan", "blouse", "t-shirt"}, "bottom": {"jeans", "skirt"}, "shoes": {"sneakers", "loafers"}},
-    
-    # === SEYAHAT & ÖZEL ===
-    "travel": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
-    "weekend-getaway": {"top": {"t-shirt", "cardigan"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
-    "holiday": {"top": {"tank-top", "t-shirt"}, "bottom": {"fabric-shorts", "skirt"}, "shoes": {"sandals"}},
-    "festival": {"top": {"crop-top", "t-shirt", "tank-top"}, "bottom": {"denim-shorts"}, "shoes": {"boots"}},
-    "sightseeing": {"top": {"t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sneakers"}}
+    # === KUTLAMA & RESMİ ===
+    "celebration": {
+        "valid_structures": [
+            {"one-piece": {"evening-dress", "jumpsuit", "casual-dress"}, "shoes": {"heels", "sandals", "sneakers", "flats"}},
+            {"top": {"blouse", "crop-top"}, "bottom": {"skirt", "trousers"}, "shoes": {"heels", "sneakers", "boots"}}
+        ],
+        "forbidden_categories": {"track-bottom", "hoodie", "sporty-dress"}
+    },
+    "formal-dinner": {
+        "valid_structures": [
+            {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels", "classic-shoes"}},
+            {"top": {"blouse"}, "bottom": {"trousers", "skirt"}, "outerwear": {"blazer"}, "shoes": {"heels"}}
+        ],
+        "forbidden_categories": {"sneakers", "jeans", "casual-dress", "t-shirt"}
+    },
+    "wedding": {
+        "valid_structures": [
+            {"one-piece": {"evening-dress", "jumpsuit", "modest-evening-dress"}, "shoes": {"heels", "sandals", "classic-shoes"}}
+        ],
+        "forbidden_categories": {"sneakers", "boots", "jeans", "t-shirt"}
+    },
+
+    # === AKTİF & SPOR ===
+    "yoga-pilates": {
+        "valid_structures": [
+            {"top": {"tank-top", "bralette", "t-shirt"}, "bottom": {"leggings", "track-bottom"}}
+        ],
+        "forbidden_categories": {"jeans", "shirt", "blouse", "boots", "heels", "sweater", "casual-dress"}
+    },
+    "gym": {
+        "valid_structures": [
+            {"top": {"t-shirt", "tank-top", "track-top"}, "bottom": {"leggings", "track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}
+        ],
+        "forbidden_categories": {"jeans", "shirt", "blouse", "heels"}
+    }
 }
 
 OCCASION_REQUIREMENTS_MALE = {
-    # === AKTİF & SPOR ===
-    "gym": {"sportswear": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"}},
-    "yoga-pilates": {"sportswear": {"track-bottom", "athletic-shorts", "t-shirt", "tank-top"}},
-    "outdoor-sports": {"sportswear": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"}},
-    "hiking": {"bottom": {"track-bottom"}, "shoes": {"boots", "sneakers"}, "outerwear": {"raincoat", "puffer-coat"}},
-
     # === İŞ & PROFESYONEL ===
-    "office-day": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "suit-trousers"}, "shoes": {"classic-shoes", "loafers"}},
-    "business-meeting": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes"}},
-    "business-lunch": {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "linen-trousers"}, "shoes": {"classic-shoes", "loafers"}},
-    
-    # === KUTLAMA & RESMİ ===
-    "wedding": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}},
-    "special-event": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}},
-    "celebration": {"top": {"shirt"}, "bottom": {"trousers", "jeans"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "boots"}},
-    "formal-dinner": {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}},
+    "office-day": {
+        "valid_structures": [
+            {"top": {"shirt", "polo-shirt", "sweater"}, "bottom": {"trousers", "suit-trousers"}, "shoes": {"classic-shoes", "loafers", "sneakers", "boots"}}
+        ],
+        "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "tank-top"}
+    },
+    "business-meeting": {
+        "valid_structures": [
+            {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes", "loafers"}}
+        ],
+        "forbidden_categories": {"jeans", "sneakers", "t-shirt", "polo-shirt"}
+    },
 
-    # === GÜNLÜK & SOSYAL ===
-    "daily-errands": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
-    "shopping": {"top": {"t-shirt", "polo-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
-    "house-party": {"top": {"shirt", "t-shirt", "polo-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
-    "date-night": {"top": {"shirt", "t-shirt"}, "bottom": {"jeans", "trousers"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "boots"}},
-    "brunch": {"top": {"shirt", "polo-shirt", "t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sandals", "sneakers"}},
-    "friends-gathering": {"top": {"t-shirt", "sweatshirt", "hoodie"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
-    "cinema": {"top": {"hoodie", "t-shirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
-    "concert": {"top": {"t-shirt"}, "bottom": {"jeans"}, "outerwear": {"denim-jacket", "leather-jacket"}, "shoes": {"boots"}},
-    "cafe": {"top": {"shirt", "cardigan", "t-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers", "loafers"}},
+    # === KUTLAMA & RESMİ ===
+    "celebration": {
+        "valid_structures": [
+            {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "jeans"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "sneakers", "boots"}}
+        ],
+        "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts"}
+    },
+    "formal-dinner": {
+        "valid_structures": [
+            {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}}
+        ],
+        "forbidden_categories": {"sneakers", "jeans", "polo-shirt", "t-shirt"}
+    },
+    "wedding": {
+        "valid_structures": [
+            {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}}
+        ],
+        "forbidden_categories": {"sneakers", "boots", "jeans", "polo-shirt", "t-shirt"}
+    },
     
-    # === SEYAHAT & ÖZEL ===
-    "travel": {"top": {"t-shirt", "sweatshirt"}, "bottom": {"jeans", "track-bottom"}, "shoes": {"sneakers"}},
-    "weekend-getaway": {"top": {"t-shirt", "polo-shirt"}, "bottom": {"jeans"}, "shoes": {"sneakers"}},
-    "holiday": {"top": {"t-shirt", "polo-shirt", "tank-top"}, "bottom": {"fabric-shorts"}, "shoes": {"sandals"}},
-    "festival": {"top": {"t-shirt", "tank-top"}, "bottom": {"denim-shorts"}, "shoes": {"boots"}},
-    "sightseeing": {"top": {"t-shirt"}, "bottom": {"jeans", "fabric-shorts"}, "shoes": {"sneakers"}}
+    # === AKTİF & SPOR ===
+    "yoga-pilates": {
+        "valid_structures": [
+            {"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}}
+        ],
+        "forbidden_categories": {"jeans", "shirt", "polo-shirt", "boots", "classic-shoes", "sweater"}
+    },
+    "gym": {
+        "valid_structures": [
+            {"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}
+        ],
+        "forbidden_categories": {"jeans", "shirt", "classic-shoes", "boots"}
+    }
 }
 
 class GPTLoadBalancer:
@@ -121,6 +155,53 @@ class AdvancedOutfitEngine:
     """NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
     
     def check_wardrobe_compatibility(self, occasion: str, wardrobe: List[OptimizedClothingItem], gender: str):
+        """
+        NİHAİ VERSİYON: Gardırobun, etkinlik için tanımlanmış ESNEK KOMBİN ŞABLONLARINDAN
+        en az birini karşılayıp karşılamadığını kontrol eder.
+        """
+        requirements_map = OCCASION_REQUIREMENTS_MALE if gender == 'male' else OCCASION_REQUIREMENTS_FEMALE
+        
+        if occasion not in requirements_map:
+            return  # Bu etkinlik için özel bir kural yoksa, kontrolden geç
+
+        occasion_rules = requirements_map[occasion]
+        valid_structures = occasion_rules.get("valid_structures", [])
+        wardrobe_categories = {item.category for item in wardrobe}
+        
+        # Eğer etkinlik için hiçbir geçerli yapı tanımlanmamışsa, kontrolden geç
+        if not valid_structures:
+            return
+
+        # Tanımlanmış geçerli şablonlardan en az BİRİ oluşturulabiliyor mu?
+        can_create_any_structure = False
+        for structure in valid_structures:
+            # Bu şablonun gerektirdiği tüm gruplar (top, bottom vb.) gardıropta var mı?
+            is_this_structure_possible = True
+            for group, required_cats in structure.items():
+                if not wardrobe_categories.intersection(required_cats):
+                    # Bu grup için gardıropta eşleşen kategori yok, bu şablon oluşturulamaz.
+                    is_this_structure_possible = False
+                    break  # Bu şablonu kontrol etmeyi bırak, sonrakine geç.
+            
+            if is_this_structure_possible:
+                # Harika! Gardırop bu şablonu oluşturabiliyor. Kontrol başarılı.
+                can_create_any_structure = True
+                break # Ana döngüden çık.
+
+        # Eğer tüm şablonlar denendi ve HİÇBİRİ oluşturulamıyorsa, o zaman hata ver.
+        if not can_create_any_structure:
+            # Kullanıcıya yol göstermek için tüm olası kategorileri toplayıp gösterelim.
+            all_possible_categories = set()
+            for structure in valid_structures:
+                for cats in structure.values():
+                    all_possible_categories.update(cats)
+            
+            missing_types = ", ".join(sorted(list(all_possible_categories)))
+            error_detail = (
+                f"Your wardrobe is not suitable for '{occasion}'. "
+                f"Please add appropriate items like: {missing_types}."
+            )
+            raise HTTPException(status_code=422, detail=error_detail)
         """
         NİHAİ VERSİYON: Gardırobun, etkinlik için gerekli KATEGORİ GRUPLARINA sahip olup olmadığını kontrol eder.
         """
@@ -377,23 +458,38 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
+        # 1. Gardırop uygunluğunu yeni akıllı ve esnek fonksiyonla kontrol et
         outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
 
-        if not request.wardrobe:
-            raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
+        # 2. GPT'nin hata yapmasını önlemek için yasaklı kategorileri filtrele
+        requirements_map = OCCASION_REQUIREMENTS_MALE if user_info["gender"] == 'male' else OCCASION_REQUIREMENTS_FEMALE
+        occasion_rules = requirements_map.get(request.occasion, {})
+        forbidden_categories = occasion_rules.get("forbidden_categories", set())
+        
+        filtered_wardrobe = [item for item in request.wardrobe if item.category not in forbidden_categories]
+        
+        # Eğer filtreleme sonrası gardırop boş kalırsa, orijinal listeyi kullan (güvenlik önlemi)
+        request.wardrobe = filtered_wardrobe if filtered_wardrobe else request.wardrobe
 
+        if not request.wardrobe: 
+            raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
+        
+        # 3. GPT'ye gönderilecek prompt'u, son kombinleri de içerecek şekilde oluştur
         prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
+        
+        # 4. GPT'yi çağır
         response_content = await call_gpt_with_retry(prompt, user_info["plan"])
         ai_response = json.loads(response_content)
-
+        
+        # 5. Gelen yanıtı doğrula
         final_items = outfit_engine.validate_outfit_structure(ai_response.get("items", []), request.wardrobe)
-        if not final_items:
+        if not final_items: 
             raise HTTPException(status_code=500, detail="AI failed to create a valid outfit.")
-
+        
         description = outfit_engine.standardize_terminology(ai_response.get("description", ""), request.language)
         suggestion_tip = outfit_engine.standardize_terminology(ai_response.get("suggestion_tip", ""), request.language)
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
-
+        
         if user_info["plan"] == "premium" and "pinterest_links" in ai_response:
             final_pinterest_links = []
             for link_idea in ai_response.get("pinterest_links", []):
@@ -403,42 +499,28 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
                     final_pinterest_links.append(PinterestLink(title=link_idea.get("title", "Inspiration"), url=f"https://www.pinterest.com/search/pins/?q={encoded_query}"))
             response_data["pinterest_links"] = final_pinterest_links
 
-        # --- NİHAİ DÜZELTME: Firestore'a Uyumlu Veri Yapısı ---
-        
-        # 1. Yeni kombinin ID'lerini bir liste olarak al.
-        new_outfit_ids = sorted([item.id for item in final_items]) # Sıralamak, karşılaştırmayı kolaylaştırır.
-        
-        # 2. Yeni kombini Firestore'un kabul ettiği bir harita (map) formatına dönüştür.
+        # 6. Yeni kombini Firestore'a hatasız formatta kaydet
+        new_outfit_ids = sorted([item.id for item in final_items])
         new_outfit_map = {"items": new_outfit_ids}
         
-        # 3. Firestore'dan gelen mevcut kombin listesini al (bu da artık haritalardan oluşacak).
         existing_outfits = user_info.get("recent_outfits", [])
         
-        # 4. Yeni kombinin bir kopyası olup olmadığını kontrol et.
-        is_duplicate = False
-        for existing_outfit in existing_outfits:
-            # Her haritanın içindeki 'items' listesini sıralayarak karşılaştır.
-            if sorted(existing_outfit.get("items", [])) == new_outfit_ids:
-                is_duplicate = True
-                break
+        is_duplicate = any(sorted(existing_outfit.get("items", [])) == new_outfit_ids for existing_outfit in existing_outfits)
         
-        # 5. Eğer kopya değilse, listeyi güncelle.
         if not is_duplicate:
             updated_outfits = [new_outfit_map] + existing_outfits
-            trimmed_outfits = updated_outfits[:3] # Listeyi en fazla 3 elemanla sınırla
+            trimmed_outfits = updated_outfits[:3]
         else:
             trimmed_outfits = existing_outfits
 
-        # 6. Firestore'a hem kullanım sayısını hem de yeni listeyi (haritalardan oluşan dizi) tek seferde yaz.
         db.collection('users').document(user_info["user_id"]).update({
             'usage.count': firestore.Increment(1),
             'recent_outfits': trimmed_outfits
         })
-        # --- DÜZELTME SONU ---
 
         print(f"✅ Outfit suggestion created and provided in '{request.language}' for {user_info['plan']} user")
         return OutfitResponse(**response_data)
-
+        
     except json.JSONDecodeError: raise HTTPException(status_code=502, detail="Failed to parse AI response.")
     except HTTPException: raise
     except Exception as e:
