@@ -7,6 +7,27 @@ Yeni bir dil eklemek için, 'TRANSLATIONS' sözlüğüne yeni bir anahtar
 """
 import json
 
+SAME_OUTFIT_ERRORS = {
+    "en": "We couldn't create a new combination with your current items. Please add more clothes to your wardrobe for more variety!",
+    "tr": "Mevcut kıyafetlerinle yeni bir kombin oluşturamadık. Daha fazla çeşitlilik için lütfen gardırobuna yeni kıyafetler ekle!",
+    "ar": "لم نتمكن من إنشاء تشكيلة جديدة بملابسك الحالية. يرجى إضافة المزيد من الملابس إلى خزانة ملابسك لمزيد من التنوع!",
+    "bg": "Не можахме да създадем нова комбинация с настоящите ви дрехи. Моля, добавете още дрехи към гардероба си за повече разнообразие!",
+    "de": "Wir konnten mit deinen aktuellen Kleidungsstücken keine neue Kombination erstellen. Bitte füge deinem Kleiderschrank weitere Kleidung für mehr Vielfalt hinzu!",
+    "el": "Δεν μπορέσαμε να δημιουργήσουμε έναν νέο συνδυασμό με τα τρέχοντα ρούχα σας. Προσθέστε περισσότερα ρούχα στην γκαρνταρόμπα σας για μεγαλύτερη ποικιλία!",
+    "es": "No pudimos crear una nueva combinación con tu ropa actual. ¡Por favor, añade más ropa a tu armario para tener más variedad!",
+    "fr": "Nous n'avons pas pu créer une nouvelle combinaison avec vos vêtements actuels. Veuillez ajouter plus de vêtements à votre garde-robe pour plus de variété !",
+    "he": "לא הצלחנו ליצור שילוב חדש עם הבגדים הנוכחיים שלך. אנא הוסף/הוסיפי עוד בגדים לארון הבגדים שלך למגוון רחב יותר!",
+    "hi": "हम आपके मौजूदा कपड़ों के साथ कोई नया संयोजन नहीं बना सके। अधिक विविधता के लिए कृपया अपनी अलमारी में और कपड़े जोड़ें!",
+    "id": "Kami tidak dapat membuat kombinasi baru dengan item Anda saat ini. Silakan tambahkan lebih banyak pakaian ke lemari Anda untuk variasi yang lebih banyak!",
+    "it": "Non siamo riusciti a creare una nuova combinazione con i tuoi capi attuali. Aggiungi altri vestiti al tuo guardaroba per una maggiore varietà!",
+    "ja": "現在のアイテムで新しい組み合わせを作成できませんでした。もっと多様性を出すために、ワードローブに服を追加してください！",
+    "ko": "현재 아이템으로는 새로운 조합을 만들 수 없었습니다. 더 다양한 스타일을 위해 옷장에 옷을 추가해주세요!",
+    "pt": "Não foi possível criar uma nova combinação com seus itens atuais. Por favor, adicione mais roupas ao seu guarda-roupa para mais variedade!",
+    "ru": "Мы не смогли создать новую комбинацию с имеющимися вещами. Пожалуйста, добавьте больше одежды в свой гардероб для большего разнообразия!",
+    "tl": "Hindi kami makagawa ng bagong kumbinasyon gamit ang iyong mga kasalukuyang damit. Mangyaring magdagdag ng higit pang mga damit sa iyong wardrobe para sa mas maraming pagpipilian!",
+    "zh": "我们无法用您当前的衣物创建新的组合。请在您的衣柜中添加更多衣物以获得更多选择！"
+}
+
 LANGUAGE_NAMES = {
     'ar': 'Arabic',
     'bg': 'Bulgarian',

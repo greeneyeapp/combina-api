@@ -15,7 +15,10 @@ import time
 from core.config import settings
 from core.security import get_current_user_id
 from schemas import OutfitRequest, OutfitResponse, OptimizedClothingItem, SuggestedItem, PinterestLink
+# YENİ: Merkezi hata mesajlarını ve diğer yerelleştirme verilerini import et
 from core import localization
+from core.localization import SAME_OUTFIT_ERRORS
+
 
 router = APIRouter(prefix="/api", tags=["outfits"])
 
@@ -25,7 +28,7 @@ secondary_client = OpenAI(api_key=settings.OPENAI_API_KEY2)
 db = firestore.client()
 PLAN_LIMITS = {"free": 2, "premium": None}
 
-# --- YENİ EKLENEN STİL ve RENK KURALLARI (Görsellerden Alınmıştır) ---
+# --- STİL ve RENK KURALLARI ---
 POPULAR_COLOR_COMBINATIONS = {
     "navy": {"colors": ["white", "beige", "mustard", "pink"], "effect": "Classic & Noble"},
     "black": {"colors": ["silver", "red", "white"], "effect": "Strong & Timeless"},
@@ -51,100 +54,27 @@ GENERAL_STYLE_PRINCIPLES = """
 - Seasonality: Ensure fabrics are appropriate for the weather (e.g., no wool in hot weather).
 """
 
-# --- ETKİNLİK GEREKSİNİMLERİ (Kategori doğrulamasından geçmiş hali) ---
+# --- ETKİNLİK GEREKSİNİMLERİ ---
 OCCASION_REQUIREMENTS_FEMALE = {
-    "office-day": {
-        "valid_structures": [
-            {"top": {"blouse", "shirt", "sweater"}, "bottom": {"trousers", "mini-skirt", "midi-skirt", "long-skirt"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers", "boots"}},
-            {"one-piece": {"casual-dress", "jumpsuit"}, "outerwear": {"blazer", "cardigan"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers"}}
-        ],
-        "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "crop-top"}
-    },
-    "business-meeting": {
-        "valid_structures": [
-            {"top": {"blouse", "shirt"}, "bottom": {"trousers", "mini-skirt", "midi-skirt"}, "outerwear": {"blazer", "suit-jacket"}, "shoes": {"heels", "classic-shoes"}},
-            {"one-piece": {"evening-dress"}, "outerwear": {"blazer"}, "shoes": {"heels"}}
-        ],
-        "forbidden_categories": {"jeans", "sneakers", "t-shirt", "sweatshirt"}
-    },
-    "celebration": {
-        "valid_structures": [
-            {"one-piece": {"evening-dress", "jumpsuit", "casual-dress"}, "shoes": {"heels", "sandals", "sneakers", "flats"}},
-            {"top": {"blouse", "crop-top"}, "bottom": {"trousers", "mini-skirt", "midi-skirt", "long-skirt"}, "shoes": {"heels", "sneakers", "boots"}}
-        ],
-        "forbidden_categories": {"track-bottom", "hoodie", "sporty-dress"}
-    },
-    "formal-dinner": {
-        "valid_structures": [
-            {"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels", "classic-shoes"}},
-            {"top": {"blouse"}, "bottom": {"trousers", "mini-skirt", "midi-skirt"}, "outerwear": {"blazer"}, "shoes": {"heels"}}
-        ],
-        "forbidden_categories": {"sneakers", "jeans", "casual-dress", "t-shirt"}
-    },
-    "wedding": {
-        "valid_structures": [
-            {"one-piece": {"evening-dress", "jumpsuit", "modest-evening-dress"}, "shoes": {"heels", "sandals", "classic-shoes"}}
-        ],
-        "forbidden_categories": {"sneakers", "boots", "jeans", "t-shirt"}
-    },
-    "yoga-pilates": {
-        "valid_structures": [
-            {"top": {"tank-top", "bralette", "t-shirt"}, "bottom": {"leggings", "track-bottom"}}
-        ],
-        "forbidden_categories": {"jeans", "shirt", "blouse", "boots", "heels", "sweater", "casual-dress"}
-    },
-    "gym": {
-        "valid_structures": [
-            {"top": {"t-shirt", "tank-top", "track-top"}, "bottom": {"leggings", "track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}
-        ],
-        "forbidden_categories": {"jeans", "shirt", "blouse", "heels"}
-    }
+    "office-day": {"valid_structures": [{"top": {"blouse", "shirt", "sweater"}, "bottom": {"trousers", "mini-skirt", "midi-skirt", "long-skirt"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers", "boots"}}, {"one-piece": {"casual-dress", "jumpsuit"}, "outerwear": {"blazer", "cardigan"}, "shoes": {"classic-shoes", "loafers", "heels", "sneakers"}}], "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "crop-top"}},
+    "business-meeting": {"valid_structures": [{"top": {"blouse", "shirt"}, "bottom": {"trousers", "mini-skirt", "midi-skirt"}, "outerwear": {"blazer", "suit-jacket"}, "shoes": {"heels", "classic-shoes"}}, {"one-piece": {"evening-dress"}, "outerwear": {"blazer"}, "shoes": {"heels"}}], "forbidden_categories": {"jeans", "sneakers", "t-shirt", "sweatshirt"}},
+    "celebration": {"valid_structures": [{"one-piece": {"evening-dress", "jumpsuit", "casual-dress"}, "shoes": {"heels", "sandals", "sneakers", "flats"}}, {"top": {"blouse", "crop-top"}, "bottom": {"trousers", "mini-skirt", "midi-skirt", "long-skirt"}, "shoes": {"heels", "sneakers", "boots"}}], "forbidden_categories": {"track-bottom", "hoodie", "sporty-dress"}},
+    "formal-dinner": {"valid_structures": [{"one-piece": {"evening-dress", "jumpsuit"}, "shoes": {"heels", "classic-shoes"}}, {"top": {"blouse"}, "bottom": {"trousers", "mini-skirt", "midi-skirt"}, "outerwear": {"blazer"}, "shoes": {"heels"}}], "forbidden_categories": {"sneakers", "jeans", "casual-dress", "t-shirt"}},
+    "wedding": {"valid_structures": [{"one-piece": {"evening-dress", "jumpsuit", "modest-evening-dress"}, "shoes": {"heels", "sandals", "classic-shoes"}}], "forbidden_categories": {"sneakers", "boots", "jeans", "t-shirt"}},
+    "yoga-pilates": {"valid_structures": [{"top": {"tank-top", "bralette", "t-shirt"}, "bottom": {"leggings", "track-bottom"}}], "forbidden_categories": {"jeans", "shirt", "blouse", "boots", "heels", "sweater", "casual-dress"}},
+    "gym": {"valid_structures": [{"top": {"t-shirt", "tank-top", "track-top"}, "bottom": {"leggings", "track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}], "forbidden_categories": {"jeans", "shirt", "blouse", "heels"}},
 }
 
 OCCASION_REQUIREMENTS_MALE = {
-    "office-day": {
-        "valid_structures": [
-            {"top": {"shirt", "polo-shirt", "sweater"}, "bottom": {"trousers", "suit-trousers"}, "shoes": {"classic-shoes", "loafers", "sneakers", "boots"}}
-        ],
-        "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "tank-top"}
-    },
-    "business-meeting": {
-        "valid_structures": [
-            {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes", "loafers"}}
-        ],
-        "forbidden_categories": {"jeans", "sneakers", "t-shirt", "polo-shirt"}
-    },
-    "celebration": {
-        "valid_structures": [
-            {"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "jeans"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "sneakers", "boots"}}
-        ],
-        "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts"}
-    },
-    "formal-dinner": {
-        "valid_structures": [
-            {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}}
-        ],
-        "forbidden_categories": {"sneakers", "jeans", "polo-shirt", "t-shirt"}
-    },
-    "wedding": {
-        "valid_structures": [
-            {"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}}
-        ],
-        "forbidden_categories": {"sneakers", "boots", "jeans", "polo-shirt", "t-shirt"}
-    },
-    "yoga-pilates": {
-        "valid_structures": [
-            {"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}}
-        ],
-        "forbidden_categories": {"jeans", "shirt", "polo-shirt", "boots", "classic-shoes", "sweater"}
-    },
-    "gym": {
-        "valid_structures": [
-            {"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}
-        ],
-        "forbidden_categories": {"jeans", "shirt", "classic-shoes", "boots"}
-    }
+    "office-day": {"valid_structures": [{"top": {"shirt", "polo-shirt", "sweater"}, "bottom": {"trousers", "suit-trousers"}, "shoes": {"classic-shoes", "loafers", "sneakers", "boots"}}], "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts", "tank-top"}},
+    "business-meeting": {"valid_structures": [{"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "blazer"}, "shoes": {"classic-shoes", "loafers"}}], "forbidden_categories": {"jeans", "sneakers", "t-shirt", "polo-shirt"}},
+    "celebration": {"valid_structures": [{"top": {"shirt", "polo-shirt"}, "bottom": {"trousers", "jeans"}, "outerwear": {"blazer"}, "shoes": {"classic-shoes", "sneakers", "boots"}}], "forbidden_categories": {"track-bottom", "hoodie", "athletic-shorts"}},
+    "formal-dinner": {"valid_structures": [{"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}}], "forbidden_categories": {"sneakers", "jeans", "polo-shirt", "t-shirt"}},
+    "wedding": {"valid_structures": [{"top": {"shirt"}, "bottom": {"suit-trousers"}, "outerwear": {"suit-jacket", "tuxedo"}, "shoes": {"classic-shoes"}}], "forbidden_categories": {"sneakers", "boots", "jeans", "polo-shirt", "t-shirt"}},
+    "yoga-pilates": {"valid_structures": [{"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}}], "forbidden_categories": {"jeans", "shirt", "polo-shirt", "boots", "classic-shoes", "sweater"}},
+    "gym": {"valid_structures": [{"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}], "forbidden_categories": {"jeans", "shirt", "classic-shoes", "boots"}},
 }
+
 
 # --- Servis Sınıfları ---
 class GPTLoadBalancer:
@@ -170,17 +100,20 @@ class AdvancedOutfitEngine:
         requirements_map = OCCASION_REQUIREMENTS_MALE if gender == 'male' else OCCASION_REQUIREMENTS_FEMALE
         if occasion not in requirements_map: return
         occasion_rules = requirements_map[occasion]
-        valid_structures, wardrobe_categories = occasion_rules.get("valid_structures", []), {item.category for item in wardrobe}
+        valid_structures = occasion_rules.get("valid_structures", [])
         if not valid_structures: return
+        wardrobe_categories = {item.category for item in wardrobe}
         can_create_any_structure = any(all(wardrobe_categories.intersection(req_cats) for _, req_cats in struct.items()) for struct in valid_structures)
         if not can_create_any_structure:
             all_possible_categories = {cat for struct in valid_structures for cats in struct.values() for cat in cats}
-            raise HTTPException(status_code=422, detail=f"Your wardrobe is not suitable for '{occasion}'. Please add appropriate items like: {', '.join(sorted(list(all_possible_categories)))}.")
+            error_detail = f"Your wardrobe is not suitable for '{occasion}'. Please add appropriate items like: {', '.join(sorted(list(all_possible_categories)))}."
+            # Bu hata mesajı kullanıcıya gösterilmeden önce yerelleştirilebilir, ancak şimdilik sabit.
+            raise HTTPException(status_code=422, detail=error_detail)
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
 
-    def create_advanced_prompt(self, request: OutfitRequest, recent_outfits: List[List[str]]) -> str:
+    def create_advanced_prompt(self, request: OutfitRequest, recent_outfits: List[Dict[str, Any]]) -> str:
         lang_code, gender = request.language, request.gender
         target_language = localization.LANGUAGE_NAMES.get(lang_code, "English")
         en_occasions = localization.get_translation('en', 'occasions')
@@ -227,6 +160,7 @@ JSON RESPONSE STRUCTURE:
 
 outfit_engine = AdvancedOutfitEngine()
 
+
 # --- Yardımcı Fonksiyonlar ---
 async def check_usage_and_get_user_data(user_id: str = Depends(get_current_user_id)):
     today = str(date.today()); user_ref = db.collection('users').document(user_id); user_doc = user_ref.get()
@@ -257,7 +191,6 @@ async def call_gpt_with_retry(prompt: str, plan: str, attempt: int = 1, max_retr
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
-        # --- Ön Kontroller ve Filtreleme ---
         outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
         requirements_map = OCCASION_REQUIREMENTS_MALE if user_info["gender"] == 'male' else OCCASION_REQUIREMENTS_FEMALE
         occasion_rules = requirements_map.get(request.occasion, {}); forbidden_categories = occasion_rules.get("forbidden_categories", set())
@@ -265,51 +198,36 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         request.wardrobe = filtered_wardrobe if filtered_wardrobe else request.wardrobe
         if not request.wardrobe: raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
 
-        # --- KENDİNİ İYİLEŞTİREN NİHAİ DÖNGÜ ---
-        max_attempts = 3
-        final_items = None
-        ai_response = None
-        
+        max_attempts = 3; final_items = None; ai_response = None
         base_prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
         existing_outfits_ids = [sorted(outfit.get("items", [])) for outfit in user_info.get("recent_outfits", [])]
-        
-        # Her denemede yasaklanacak item'ları biriktireceğimiz liste
         hard_avoid_ids = set()
 
         for attempt in range(1, max_attempts + 1):
             print(f"🤖 AI outfit generation attempt {attempt}/{max_attempts}...")
-            
             current_prompt = base_prompt
-            # Eğer önceki denemeler başarısız olduysa, yasaklı listesini prompt'a ekle
             if hard_avoid_ids:
-                avoid_prompt = f"\nCRITICAL AVOIDANCE RULE: You are strictly forbidden from using any of these item IDs in your new combination: {', '.join(hard_avoid_ids)}\n"
+                avoid_prompt = f"\nCRITICAL AVOIDANCE RULE: You are strictly forbidden from using any of these item IDs: {', '.join(hard_avoid_ids)}\n"
                 current_prompt += avoid_prompt
 
             response_content = await call_gpt_with_retry(current_prompt, user_info["plan"], attempt=attempt)
             current_ai_response = json.loads(response_content)
             validated_items = outfit_engine.validate_outfit_structure(current_ai_response.get("items", []), request.wardrobe)
-            
-            if not validated_items:
-                print(f"⚠️ Attempt {attempt}: AI did not return a valid outfit structure. Retrying..."); continue
+            if not validated_items: print(f"⚠️ Attempt {attempt}: AI returned an invalid structure. Retrying..."); continue
 
             new_outfit_ids = sorted([item.id for item in validated_items])
-            
-            # Hem "recent_outfits" listesini hem de bu döngüde denenenleri kontrol et
             if new_outfit_ids in existing_outfits_ids or any(item_id in hard_avoid_ids for item_id in new_outfit_ids):
-                print(f"❌ Attempt {attempt}: AI suggested a repeated outfit. Adding items to hard-avoid list and retrying...")
-                # Başarısız kombindeki item'ları yasaklı listesine ekle
-                for item_id in new_outfit_ids:
-                    hard_avoid_ids.add(item_id)
+                print(f"❌ Attempt {attempt}: AI suggested a repeated outfit. Retrying...")
+                for item_id in new_outfit_ids: hard_avoid_ids.add(item_id)
                 continue
             
             final_items = validated_items; ai_response = current_ai_response; print("✅ Unique and valid outfit found!"); break
         
-        # --- ZARİF BAŞARISIZLIK (GRACEFUL FAILURE) ---
         if not final_items:
             print("🛑 All attempts failed. Could not generate a unique outfit.")
-            raise HTTPException(status_code=422, detail="We couldn't create a new combination with your current items. Please add more clothes to your wardrobe for more variety!")
+            error_message = SAME_OUTFIT_ERRORS.get(request.language, SAME_OUTFIT_ERRORS["en"])
+            raise HTTPException(status_code=422, detail=error_message)
 
-        # ... (Yanıt hazırlama ve veritabanı güncelleme kodları öncekiyle aynı kalır) ...
         description = ai_response.get("description", ""); suggestion_tip = ai_response.get("suggestion_tip", "")
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
         
@@ -326,7 +244,6 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         trimmed_outfits = updated_outfits[:5]
 
         db.collection('users').document(user_info["user_id"]).update({'usage.count': firestore.Increment(1), 'recent_outfits': trimmed_outfits})
-
         print(f"✅ Outfit suggestion created and provided in '{request.language}' for {user_info['plan']} user")
         return OutfitResponse(**response_data)
         
