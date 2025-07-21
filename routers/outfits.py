@@ -257,6 +257,7 @@ async def call_gpt_with_retry(prompt: str, plan: str, attempt: int = 1, max_retr
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
+        # --- Ön Kontroller ve Filtreleme ---
         outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, user_info["gender"])
         requirements_map = OCCASION_REQUIREMENTS_MALE if user_info["gender"] == 'male' else OCCASION_REQUIREMENTS_FEMALE
         occasion_rules = requirements_map.get(request.occasion, {}); forbidden_categories = occasion_rules.get("forbidden_categories", set())
@@ -264,29 +265,51 @@ async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check
         request.wardrobe = filtered_wardrobe if filtered_wardrobe else request.wardrobe
         if not request.wardrobe: raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
 
-        max_attempts = 3; final_items = None; ai_response = None
+        # --- KENDİNİ İYİLEŞTİREN NİHAİ DÖNGÜ ---
+        max_attempts = 3
+        final_items = None
+        ai_response = None
+        
         base_prompt = outfit_engine.create_advanced_prompt(request, user_info["recent_outfits"])
         existing_outfits_ids = [sorted(outfit.get("items", [])) for outfit in user_info.get("recent_outfits", [])]
+        
+        # Her denemede yasaklanacak item'ları biriktireceğimiz liste
+        hard_avoid_ids = set()
 
         for attempt in range(1, max_attempts + 1):
             print(f"🤖 AI outfit generation attempt {attempt}/{max_attempts}...")
-            current_prompt = base_prompt
-            if attempt > 1: current_prompt += "\nCRITICAL REMINDER: You MUST generate a NEW and DIFFERENT combination. Be more creative.\n"
             
+            current_prompt = base_prompt
+            # Eğer önceki denemeler başarısız olduysa, yasaklı listesini prompt'a ekle
+            if hard_avoid_ids:
+                avoid_prompt = f"\nCRITICAL AVOIDANCE RULE: You are strictly forbidden from using any of these item IDs in your new combination: {', '.join(hard_avoid_ids)}\n"
+                current_prompt += avoid_prompt
+
             response_content = await call_gpt_with_retry(current_prompt, user_info["plan"], attempt=attempt)
             current_ai_response = json.loads(response_content)
             validated_items = outfit_engine.validate_outfit_structure(current_ai_response.get("items", []), request.wardrobe)
-            if not validated_items: print(f"⚠️ Attempt {attempt}: AI did not return a valid outfit structure. Retrying..."); continue
+            
+            if not validated_items:
+                print(f"⚠️ Attempt {attempt}: AI did not return a valid outfit structure. Retrying..."); continue
 
             new_outfit_ids = sorted([item.id for item in validated_items])
-            if new_outfit_ids in existing_outfits_ids: print(f"❌ Attempt {attempt}: AI suggested a repeated outfit. Increasing creativity and retrying..."); continue
+            
+            # Hem "recent_outfits" listesini hem de bu döngüde denenenleri kontrol et
+            if new_outfit_ids in existing_outfits_ids or any(item_id in hard_avoid_ids for item_id in new_outfit_ids):
+                print(f"❌ Attempt {attempt}: AI suggested a repeated outfit. Adding items to hard-avoid list and retrying...")
+                # Başarısız kombindeki item'ları yasaklı listesine ekle
+                for item_id in new_outfit_ids:
+                    hard_avoid_ids.add(item_id)
+                continue
             
             final_items = validated_items; ai_response = current_ai_response; print("✅ Unique and valid outfit found!"); break
         
+        # --- ZARİF BAŞARISIZLIK (GRACEFUL FAILURE) ---
         if not final_items:
             print("🛑 All attempts failed. Could not generate a unique outfit.")
             raise HTTPException(status_code=422, detail="We couldn't create a new combination with your current items. Please add more clothes to your wardrobe for more variety!")
 
+        # ... (Yanıt hazırlama ve veritabanı güncelleme kodları öncekiyle aynı kalır) ...
         description = ai_response.get("description", ""); suggestion_tip = ai_response.get("suggestion_tip", "")
         response_data = {"items": final_items, "description": description, "suggestion_tip": suggestion_tip, "pinterest_links": []}
         
