@@ -25,7 +25,7 @@ secondary_client = OpenAI(api_key=settings.OPENAI_API_KEY2)
 db = firestore.client()
 PLAN_LIMITS = {"free": 2, "premium": None}
 
-OCCASION_REQUIREMENTS = {
+OCCASION_REQUIREMENTS_FEMALE = {
     # === AKTİF & SPOR ===
     "gym": {"leggings", "track-bottom", "athletic-shorts", "sports-bra", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"},
     "yoga-pilates": {"leggings", "track-bottom", "bralette", "tank-top", "t-shirt"},
@@ -33,21 +33,21 @@ OCCASION_REQUIREMENTS = {
     "hiking": {"track-bottom", "leggings", "boots", "sneakers", "raincoat", "puffer-coat", "backpack"},
 
     # === İŞ & PROFESYONEL ===
-    "office-day": {"trousers", "blouse", "shirt", "blazer", "skirt", "classic-shoes", "loafers", "suit-trousers", "dress-pants"},
-    "business-meeting": {"suit-jacket", "suit-trousers", "blazer", "shirt", "blouse", "evening-dress", "classic-shoes", "dress-pants"},
+    "office-day": {"trousers", "blouse", "shirt", "blazer", "skirt", "classic-shoes", "loafers", "dress-pants", "jumpsuit"},
+    "business-meeting": {"blazer", "shirt", "blouse", "trousers", "skirt", "classic-shoes", "heels", "dress-pants", "evening-dress"},
     "business-lunch": {"trousers", "blouse", "shirt", "blazer", "casual-dress", "classic-shoes", "dress-pants", "linen-trousers"},
     
     # === KUTLAMA & RESMİ ===
-    "wedding": {"evening-dress", "suit-jacket", "suit-trousers", "tuxedo", "heels", "classic-shoes"},
-    "special-event": {"evening-dress", "suit-jacket", "suit-trousers", "jumpsuit", "heels"},
+    "wedding": {"evening-dress", "jumpsuit", "heels", "classic-shoes", "blouse", "skirt"},
+    "special-event": {"evening-dress", "jumpsuit", "heels", "blazer"},
     "celebration": {"evening-dress", "casual-dress", "jumpsuit", "heels", "blouse", "trousers"},
-    "formal-dinner": {"evening-dress", "suit-jacket", "suit-trousers", "tuxedo", "heels"},
+    "formal-dinner": {"evening-dress", "jumpsuit", "heels", "blazer", "trousers"},
 
     # === GÜNLÜK & SOSYAL ===
     "daily-errands": {"jeans", "t-shirt", "sweatshirt", "sneakers", "leggings"},
     "shopping": {"jeans", "t-shirt", "sneakers", "casual-dress", "cardigan"},
     "house-party": {"jeans", "blouse", "casual-dress", "sneakers", "t-shirt"},
-    "date-night": {"casual-dress", "evening-dress", "jeans", "blouse", "heels", "shirt"},
+    "date-night": {"casual-dress", "evening-dress", "jeans", "blouse", "heels", "shirt", "skirt"},
     "brunch": {"casual-dress", "jeans", "blouse", "skirt", "sandals", "t-shirt"},
     "friends-gathering": {"jeans", "t-shirt", "sweatshirt", "sneakers", "casual-dress"},
     "cinema": {"jeans", "hoodie", "t-shirt", "sneakers"},
@@ -55,11 +55,47 @@ OCCASION_REQUIREMENTS = {
     "cafe": {"jeans", "t-shirt", "cardigan", "sneakers", "blouse"},
     
     # === SEYAHAT & ÖZEL ===
-    # 'swimwear' ve 'bikini' gibi kategoriler kaldırıldı ve yerine mevcut kategoriler kullanıldı.
     "travel": {"jeans", "t-shirt", "sweatshirt", "sneakers", "backpack", "track-bottom"},
     "weekend-getaway": {"jeans", "casual-dress", "sneakers", "cardigan", "t-shirt"},
     "holiday": {"sandals", "fabric-shorts", "casual-dress", "tank-top", "sunglasses"},
     "festival": {"denim-shorts", "boots", "t-shirt", "crop-top", "denim-jacket"},
+    "sightseeing": {"sneakers", "jeans", "t-shirt", "crossbody-bag", "hat"}
+}
+
+OCCASION_REQUIREMENTS_MALE = {
+    # === AKTİF & SPOR ===
+    "gym": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "t-shirt", "sneakers", "casual-sport-shoes"},
+    "yoga-pilates": {"track-bottom", "athletic-shorts", "t-shirt", "tank-top"},
+    "outdoor-sports": {"track-bottom", "athletic-shorts", "track-top", "sweatshirt", "hoodie", "raincoat", "sneakers", "boots"},
+    "hiking": {"track-bottom", "boots", "sneakers", "raincoat", "puffer-coat", "backpack"},
+
+    # === İŞ & PROFESYONEL ===
+    "office-day": {"trousers", "shirt", "blazer", "classic-shoes", "loafers", "suit-trousers", "dress-pants", "polo-shirt"},
+    "business-meeting": {"blazer", "shirt", "trousers", "suit-jacket", "suit-trousers", "classic-shoes", "loafers", "dress-pants"},
+    "business-lunch": {"trousers", "shirt", "blazer", "classic-shoes", "dress-pants", "linen-trousers", "polo-shirt"},
+    
+    # === KUTLAMA & RESMİ ===
+    "wedding": {"suit-jacket", "suit-trousers", "tuxedo", "shirt", "classic-shoes", "tie"},
+    "special-event": {"suit-jacket", "suit-trousers", "tuxedo", "blazer", "shirt"},
+    "celebration": {"shirt", "blazer", "trousers", "jeans", "classic-shoes"},
+    "formal-dinner": {"suit-jacket", "suit-trousers", "tuxedo", "shirt", "classic-shoes"},
+
+    # === GÜNLÜK & SOSYAL ===
+    "daily-errands": {"jeans", "t-shirt", "sweatshirt", "sneakers", "track-bottom"},
+    "shopping": {"jeans", "t-shirt", "sneakers", "polo-shirt", "cardigan"},
+    "house-party": {"jeans", "shirt", "t-shirt", "sneakers", "polo-shirt"},
+    "date-night": {"jeans", "shirt", "blazer", "t-shirt", "boots", "classic-shoes"},
+    "brunch": {"jeans", "shirt", "polo-shirt", "sandals", "t-shirt"},
+    "friends-gathering": {"jeans", "t-shirt", "sweatshirt", "sneakers", "hoodie"},
+    "cinema": {"jeans", "hoodie", "t-shirt", "sneakers"},
+    "concert": {"jeans", "t-shirt", "boots", "denim-jacket", "leather-jacket"},
+    "cafe": {"jeans", "t-shirt", "cardigan", "sneakers", "shirt"},
+    
+    # === SEYAHAT & ÖZEL ===
+    "travel": {"jeans", "t-shirt", "sweatshirt", "sneakers", "backpack", "track-bottom"},
+    "weekend-getaway": {"jeans", "sneakers", "cardigan", "t-shirt", "polo-shirt"},
+    "holiday": {"fabric-shorts", "t-shirt", "sandals", "polo-shirt", "sunglasses"},
+    "festival": {"denim-shorts", "boots", "t-shirt", "tank-top", "denim-jacket"},
     "sightseeing": {"sneakers", "jeans", "t-shirt", "crossbody-bag", "hat"}
 }
 
@@ -84,23 +120,50 @@ gpt_balancer = GPTLoadBalancer()
 class AdvancedOutfitEngine:
     """NİHAİ YAPI: AI için verimli prompt oluşturur ve gelen yanıtı backend'de işler."""
     
-    def check_wardrobe_compatibility(self, occasion: str, wardrobe: List[OptimizedClothingItem]):
-        """Verilen etkinlik için gardırobun uygun olup olmadığını kontrol eder."""
-        if occasion not in OCCASION_REQUIREMENTS:
-            return  # Etkinlik için bir kural yoksa, kontrolden geç
+    def check_wardrobe_compatibility(self, occasion: str, wardrobe: List[OptimizedClothingItem], gender: str):
+        """
+        Verilen etkinlik ve CİNSİYET için gardırobun uygun olup olmadığını kontrol eder.
+        'unisex' durumunda erkek ve kadın kurallarını dinamik olarak birleştirir.
+        """
+        required_categories = set()
 
-        required_categories = OCCASION_REQUIREMENTS[occasion]
+        # Adım 1: Cinsiyete göre doğru kural setini belirle
+        if gender == 'male':
+            # Sadece erkek kurallarını kullan
+            requirements_map = OCCASION_REQUIREMENTS_MALE
+            if occasion in requirements_map:
+                required_categories = requirements_map[occasion]
+
+        elif gender == 'female':
+            # Sadece kadın kurallarını kullan
+            requirements_map = OCCASION_REQUIREMENTS_FEMALE
+            if occasion in requirements_map:
+                required_categories = requirements_map[occasion]
+        
+        else:  # Bu blok 'unisex' ve tanımsız diğer tüm durumları yakalar
+            # Hem erkek hem de kadın listesinden kuralları güvenli bir şekilde al
+            male_reqs = OCCASION_REQUIREMENTS_MALE.get(occasion, set())
+            female_reqs = OCCASION_REQUIREMENTS_FEMALE.get(occasion, set())
+            
+            # İki kural setini birleştir (Python'da set'ler için birleşim operatörü '|')
+            required_categories = male_reqs | female_reqs
+
+        # Adım 2: Kontrolü yap
+        # Eğer bu etkinlik için hiçbir kural tanımlanmamışsa, kontrolden geç
+        if not required_categories:
+            return
+
         wardrobe_categories = {item.category for item in wardrobe}
 
-        # Gardıroptaki kategoriler ile gerekli kategoriler arasında en az bir ortak eleman var mı?
         if not wardrobe_categories.intersection(required_categories):
-            missing_types = ", ".join(required_categories)
+            # Hata mesajının her zaman aynı sırada olması için sıralama ekledim (testler için iyi)
+            missing_types = ", ".join(sorted(list(required_categories)))
+            
             error_detail = (
                 f"Your wardrobe does not have suitable items for '{occasion}'. "
                 f"Please add items like: {missing_types}."
             )
             raise HTTPException(status_code=422, detail=error_detail)
-    # --- FONKSİYON SONU ---
 
     def create_compact_wardrobe_string(self, wardrobe: List[OptimizedClothingItem]) -> str:
         return "\n".join([f"ID: {item.id} | Name: {item.name} | Category: {item.category} | Colors: {', '.join(item.colors)} | Styles: {', '.join(item.style)}" for item in wardrobe])
@@ -221,7 +284,7 @@ async def call_gpt_with_retry(prompt: str, plan: str, max_retries: int = 2) -> s
 @router.post("/suggest-outfit", response_model=OutfitResponse, summary="Creates a personalized outfit suggestion")
 async def suggest_outfit(request: OutfitRequest, user_info: dict = Depends(check_usage_and_get_user_data)):
     try:
-        outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe)
+        outfit_engine.check_wardrobe_compatibility(request.occasion, request.wardrobe, request.gender)
 
         if not request.wardrobe: 
             raise HTTPException(status_code=400, detail="Wardrobe cannot be empty.")
