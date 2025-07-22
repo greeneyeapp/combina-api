@@ -107,6 +107,7 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         "fullname": user_data.get("fullname"),
         "gender": user_data.get("gender"),
         "age": user_data.get("age"),
+        "birthDate": user_data.get("birthDate"),  # <-- EKLENMESİ GEREKEN SATIR
         "plan": plan,
         "usage": {
             "daily_limit": "unlimited" if daily_limit is None else daily_limit,
