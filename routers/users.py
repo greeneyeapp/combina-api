@@ -105,6 +105,7 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
     return {
         "user_id": user_id,
         "fullname": user_data.get("fullname"),
+        "email": user_data.get("email"),
         "gender": user_data.get("gender"),
         "age": user_data.get("age"),
         "birthDate": user_data.get("birthDate"),  # <-- EKLENMESİ GEREKEN SATIR
