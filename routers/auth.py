@@ -158,15 +158,6 @@ async def update_user_info(
             "updatedAt": firestore.SERVER_TIMESTAMP
         }
         
-        # Yaş hesapla
-        try:
-            birth_date = datetime.fromisoformat(request.birthDate.replace('Z', '+00:00'))
-            today = datetime.now()
-            age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
-            update_data["age"] = age
-        except ValueError:
-            print(f"Invalid birth date format: {request.birthDate}")
-        
         user_ref.update(update_data)
         
         return {"message": "User info updated successfully"}
