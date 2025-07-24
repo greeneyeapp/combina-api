@@ -370,3 +370,28 @@ async def grant_rewarded_suggestion(user_id: str = Depends(get_current_user_id))
     except Exception as e:
         print(f"Error granting rewarded suggestion: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to grant rewarded suggestion right.")
+    
+@router.delete("/delete-account")
+async def delete_user_account(user_id: str = Depends(get_current_user_id)):
+    """
+    Kullanıcıyı ve ilişkili tüm verilerini Firestore'dan kalıcı olarak siler.
+    Bu işlem geri alınamaz.
+    """
+    try:
+        user_ref = db.collection('users').document(user_id)
+        
+        user_doc = user_ref.get()
+        if not user_doc.exists:
+            return {"status": "success", "message": "User already deleted."}
+
+        await user_ref.delete()
+        print(f"🗑️ Firestore document for user {user_id} deleted.")
+
+        return {"status": "success", "message": "Account permanently deleted."}
+
+    except Exception as e:
+        print(f"❌ Error deleting account for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="An error occurred while deleting the account. Please try again later."
+        )
