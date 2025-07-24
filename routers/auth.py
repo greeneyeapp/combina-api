@@ -137,10 +137,10 @@ async def apple_auth(request: AppleAuthRequest):
 # Kullanıcı bilgi güncelleme endpoint'i
 @router.post("/api/users/update-info")
 async def update_user_info(
-    request: UserInfoUpdate,
+    request: UserInfoUpdate, # Bu model artık birthDate içerecek
     user_id: str = Depends(get_current_user_id)
 ):
-    """Kullanıcı bilgilerini güncelle"""
+    """Kullanıcı bilgilerini (isim, cinsiyet, doğum tarihi) güncelle"""
     try:
         user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get()
@@ -157,7 +157,22 @@ async def update_user_info(
             "gender": request.gender,
             "updatedAt": firestore.SERVER_TIMESTAMP
         }
-        
+
+        # --- DOĞUM TARİHİ VE YAŞ HESAPLAMA MANTIĞI EKLENDİ ---
+        if request.birthDate:
+            try:
+                # Gelen ISO formatındaki string'i datetime objesine çevir
+                birth_date_obj = datetime.fromisoformat(request.birthDate.replace('Z', '+00:00'))
+                update_data["birthDate"] = birth_date_obj
+                
+                # Yaşı hesapla
+                today = datetime.now()
+                age = today.year - birth_date_obj.year - ((today.month, today.day) < (birth_date_obj.month, birth_date_obj.day))
+                update_data["age"] = age
+            except (ValueError, TypeError):
+                # Hatalı format gelirse görmezden gel
+                print(f"Invalid birthDate format received: {request.birthDate}")
+
         user_ref.update(update_data)
         
         return {"message": "User info updated successfully"}

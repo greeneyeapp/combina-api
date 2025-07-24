@@ -28,7 +28,7 @@ db = firestore.client()
 async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_current_user_id)):
     user_ref = db.collection('users').document(user_id)
     
-    # Profil verilerini hazırla (Doğum tarihi ve yaş kaldırıldı)
+    # Profil verilerini hazırla
     profile_data = {
         "plan": "free",
         "gender": profile.gender,
@@ -36,15 +36,27 @@ async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_c
         "createdAt": firestore.SERVER_TIMESTAMP
     }
     
+    if profile.birthDate:
+        try:
+            birth_date = datetime.fromisoformat(profile.birthDate.replace('Z', '+00:00'))
+            profile_data["birthDate"] = birth_date
+            
+            today = datetime.now()
+            age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            profile_data["age"] = age
+            
+        except ValueError:
+            print(f"Invalid birth date format: {profile.birthDate}")
+    
     user_ref.set(profile_data, merge=True)
     
-    # Yanıttan yaş kaldırıldı
     return {
         "status": "success", 
         "message": f"Profile for user {user_id} initialized.",
         "data": {
             "gender": profile.gender,
             "fullname": profile.fullname,
+            "age": profile_data.get("age"),
             "plan": "free"
         }
     }
@@ -61,8 +73,10 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
     user_data = user_doc.to_dict()
     today_str = str(date.today())
     
+    # Mevcut kullanım verisini al
     usage_data = user_data.get("usage", {})
     
+    # Eğer tarih eski ise, hem lokal değişkeni hem de veritabanını sıfırla
     if usage_data.get("date") != today_str:
         print(f"🔄 Day has changed. Resetting usage for user {user_id[:8]}.")
         usage_data = {"count": 0, "date": today_str, "rewarded_count": 0}
@@ -70,14 +84,17 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
     
     plan = user_data.get("plan", "free")
     
-    plan_limits = {"free": 2, "premium": None}
+    # FIX: float('inf') yerine None kullan
+    plan_limits = {"free": 2, "premium": None}  # None = unlimited
     daily_limit = plan_limits.get(plan, 2)
     
+    # Değerleri her zaman güncel olan `usage_data` objesinden oku
     current_usage = usage_data.get("count", 0)
     rewarded_count = usage_data.get("rewarded_count", 0)
     
+    # Toplam kullanılabilir hakkı hesapla
     if plan == "premium":
-        effective_limit = None
+        effective_limit = None  # Unlimited
         remaining = "unlimited"
         percentage_used = 0
     else:
@@ -85,12 +102,13 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         remaining = max(0, effective_limit - current_usage)
         percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
     
-    # Yanıttan 'age' ve 'birthDate' kaldırıldı
     return {
         "user_id": user_id,
         "fullname": user_data.get("fullname"),
         "email": user_data.get("email"),
         "gender": user_data.get("gender"),
+        "age": user_data.get("age"),
+        "birthDate": user_data.get("birthDate"),
         "plan": plan,
         "usage": {
             "daily_limit": "unlimited" if daily_limit is None else daily_limit,
@@ -370,35 +388,3 @@ async def grant_rewarded_suggestion(user_id: str = Depends(get_current_user_id))
     except Exception as e:
         print(f"Error granting rewarded suggestion: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to grant rewarded suggestion right.")
-    
-@router.delete("/delete-account")
-async def delete_user_account(user_id: str = Depends(get_current_user_id)):
-    """
-    Kullanıcıyı ve ilişkili tüm verilerini Firestore'dan kalıcı olarak siler.
-    Bu işlem geri alınamaz.
-    """
-    try:
-        # 1. Firestore'dan kullanıcı dökümanını sil
-        user_ref = db.collection('users').document(user_id)
-        
-        # 'await' kaldırıldı, get() senkron çalışır.
-        user_doc = user_ref.get()
-        if not user_doc.exists:
-            # Kullanıcı zaten yoksa, işlemi başarılı kabul et.
-            return {"status": "success", "message": "User document not found, assumed already deleted."}
-
-        # 'await' kaldırıldı, delete() senkron çalışır.
-        user_ref.delete()
-        print(f"🗑️ Firestore document for user {user_id} deleted.")
-
-        # 2. (İsteğe Bağlı) Bu kullanıcıya ait diğer verileri (gardırop, kombinler vb.)
-        # farklı koleksiyonlarda tutuyorsanız, onları da buradan silebilirsiniz.
-
-        return {"status": "success", "message": "Account permanently deleted from database."}
-
-    except Exception as e:
-        print(f"❌ Error deleting account for user {user_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail="An error occurred while deleting the account. Please try again later."
-        )
