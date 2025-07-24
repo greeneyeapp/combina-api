@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, Body, Request, HTTPException
-from firebase_admin import firestore
 from pydantic import BaseModel
 from datetime import datetime, date
 import hmac
@@ -378,16 +377,23 @@ async def delete_user_account(user_id: str = Depends(get_current_user_id)):
     Bu işlem geri alınamaz.
     """
     try:
+        # 1. Firestore'dan kullanıcı dökümanını sil
         user_ref = db.collection('users').document(user_id)
         
+        # 'await' kaldırıldı, get() senkron çalışır.
         user_doc = user_ref.get()
         if not user_doc.exists:
-            return {"status": "success", "message": "User already deleted."}
+            # Kullanıcı zaten yoksa, işlemi başarılı kabul et.
+            return {"status": "success", "message": "User document not found, assumed already deleted."}
 
-        await user_ref.delete()
+        # 'await' kaldırıldı, delete() senkron çalışır.
+        user_ref.delete()
         print(f"🗑️ Firestore document for user {user_id} deleted.")
 
-        return {"status": "success", "message": "Account permanently deleted."}
+        # 2. (İsteğe Bağlı) Bu kullanıcıya ait diğer verileri (gardırop, kombinler vb.)
+        # farklı koleksiyonlarda tutuyorsanız, onları da buradan silebilirsiniz.
+
+        return {"status": "success", "message": "Account permanently deleted from database."}
 
     except Exception as e:
         print(f"❌ Error deleting account for user {user_id}: {str(e)}")
