@@ -19,7 +19,6 @@ class AppleAuthRequest(BaseModel):
 class UserInfoUpdate(BaseModel):
     name: str
     gender: str
-    birthDate: Optional[str] = None # birthDate alanı eklendi
 
 # YENİ MİMARİ İÇİN GÜNCELLENMİŞ MODELLER
 class OptimizedClothingItem(BaseModel):
@@ -97,9 +96,7 @@ class ClothingItem(BaseModel):
     class Config: populate_by_name = True
 
 class ProfileInit(BaseModel):
-    gender: str
-    fullname: str
-    birthDate: Optional[str] = None # birthDate alanı eklendi
+    gender: str; fullname: str
 
 class UsageStatusResponse(BaseModel):
     plan: str; current_usage: int; daily_limit: Union[int, str]; remaining: Union[int, str]
