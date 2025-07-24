@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import timedelta, datetime
+from firebase_admin import firestore
 import requests
 import jwt
 from typing import Optional

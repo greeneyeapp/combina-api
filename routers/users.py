@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Body, Request, HTTPException
+from firebase_admin import firestore
 from pydantic import BaseModel
 from datetime import datetime, date
 import hmac
