@@ -24,7 +24,6 @@ class AppleAuthRequest(BaseModel):
 class UserInfoUpdate(BaseModel):
     name: str
     gender: str
-    birthDate: str
 
 # Google OAuth endpoint
 @router.post("/auth/google")
@@ -156,7 +155,6 @@ async def update_user_info(
         update_data = {
             "fullname": request.name,
             "gender": request.gender,
-            "birthDate": request.birthDate,
             "updatedAt": firestore.SERVER_TIMESTAMP
         }
         
