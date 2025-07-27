@@ -75,6 +75,45 @@ OCCASION_REQUIREMENTS_MALE = {
     "gym": {"valid_structures": [{"top": {"t-shirt", "tank-top"}, "bottom": {"track-bottom", "athletic-shorts"}, "shoes": {"sneakers", "casual-sport-shoes"}}], "forbidden_categories": {"jeans", "shirt", "classic-shoes", "boots"}},
 }
 
+# --- YENİ: KURALLARI CLIENT'A GÖNDERMEK İÇİN ENDPOINT ---
+def simplify_rules_for_client(rules_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Client'ın ön filtreleme yapabilmesi için kuralları basitleştirir.
+    Sadece gerekli olan `required_one_of` yapısını oluşturur.
+    """
+    simplified = {}
+    for occasion, rules in rules_dict.items():
+        valid_structures = rules.get("valid_structures", [])
+        if not valid_structures:
+            continue
+        
+        # Her ana kategori için gerekli olan tüm alt kategorileri birleştirir
+        required_one_of: Dict[str, Set[str]] = {}
+        for struct in valid_structures:
+            for main_cat, sub_cats in struct.items():
+                if main_cat not in required_one_of:
+                    required_one_of[main_cat] = set()
+                required_one_of[main_cat].update(sub_cats)
+        
+        # Set'leri sıralanmış listelere çevirerek JSON uyumlu hale getir
+        simplified[occasion] = {
+            "required_one_of": {k: sorted(list(v)) for k, v in required_one_of.items()}
+        }
+    return simplified
+
+@router.get("/occasion-rules", tags=["config"])
+async def get_occasion_rules(user_id: str = Depends(get_current_user_id)):
+    """
+    Provides the client with simplified, occasion-based wardrobe rules
+    for pre-flight checks.
+    """
+    # Not: Set'ler JSON'a çevrilemez, bu yüzden client'a göndermeden önce listeye çeviriyoruz.
+    # Client'ın ihtiyacı olan basitleştirilmiş yapıyı gönderiyoruz.
+    simplified_female = simplify_rules_for_client(OCCASION_REQUIREMENTS_FEMALE)
+    simplified_male = simplify_rules_for_client(OCCASION_REQUIREMENTS_MALE)
+    
+    return {"female": simplified_female, "male": simplified_male}
+# --- YENİ ENDPOINT BİTİŞİ ---
 
 # --- Servis Sınıfları ---
 class GPTLoadBalancer:
