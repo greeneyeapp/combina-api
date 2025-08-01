@@ -12,8 +12,6 @@ from core.usage import get_or_create_daily_usage
 from core.config import settings
 from schemas import AnonymousSessionStart, AnonymousSessionResponse, UserProfileResponse
 
-# --- DEĞİŞİKLİK: Proje kökünden mutlak importlar kullanıldı ---
-
 router = APIRouter()
 db = firestore.client()
 
