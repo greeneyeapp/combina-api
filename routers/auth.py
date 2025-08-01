@@ -366,12 +366,16 @@ async def update_user_info(
             "fullname": request_data.name,
             "gender": request_data.gender,
             "updatedAt": firestore.SERVER_TIMESTAMP,
-            "profile_incomplete": False  # <-- EKLENMESİ GEREKEN SATIR
+            "profile_incomplete": False
         }
         
         user_ref.update(update_data)
         
-        return {"message": "User info updated successfully", "profile_complete": True}
+        # Client'a yönlendirme yapması için net bir sinyal gönder
+        return {
+            "message": "User info updated successfully", 
+            "profile_complete": True  # <-- BU ALANIN EKLENMESİ ÇOK ÖNEMLİ
+        }
         
     except Exception as e:
         print(f"Update user info error: {e}")
