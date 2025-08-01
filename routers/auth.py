@@ -4,7 +4,6 @@ from firebase_admin import firestore
 import requests
 import jwt
 import uuid
-from core.database import db
 from typing import Optional, Tuple
 from pydantic import BaseModel
 import secrets
