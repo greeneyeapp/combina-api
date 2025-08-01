@@ -158,7 +158,10 @@ async def update_user_info(
             "updatedAt": firestore.SERVER_TIMESTAMP
         }
         
-        user_ref.update(update_data)
+        # HATA DÜZELTME: update() yerine set(..., merge=True) kullanıldı.
+        # Bu yöntem, update() ile aynı işlevi görür ancak farklı bir kod yolunu
+        # kullanarak mevcut TypeError hatasını aşabilir.
+        user_ref.set(update_data, merge=True)
         
         return {"message": "User info updated successfully"}
         
