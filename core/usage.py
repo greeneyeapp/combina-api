@@ -5,7 +5,7 @@ from google.cloud import firestore
 from typing import Union
 
 # Proje içi importlar
-from ..main import db  # db Firestore client'ını ana dosyadan alıyoruz
+from .database import db  # Hatalı import düzeltildi, artık yeni database dosyasından alıyoruz
 from ..schemas import DailyUsage
 
 # Plan limitlerini merkezi bir yerde tanımlıyoruz
@@ -59,7 +59,8 @@ def get_or_create_daily_usage(user_id: str) -> DailyUsage:
             "count": current_usage,
             "rewarded_count": rewarded_count
         }
-        user_ref.update({"usage": new_usage_data})
+        # Kullanıcı dokümanı yoksa update() hata verir, bu yüzden set(..., merge=True) daha güvenli
+        user_ref.set({"usage": new_usage_data}, merge=True)
 
     # 5. Kalan hakları ve yüzdeyi hesapla
     daily_limit = PLAN_LIMITS.get(plan, 1)  # Bilinmeyen bir plan varsa 1 hak ver
@@ -93,6 +94,12 @@ def increment_usage(user_id: str) -> None:
     @firestore.transactional
     def update_in_transaction(transaction, user_ref):
         snapshot = user_ref.get(transaction=transaction)
+        
+        # Kullanıcı dokümanı yoksa işlem yapma
+        if not snapshot.exists:
+            print(f"Error: User {user_id} not found for incrementing usage.")
+            return 0
+
         user_data = snapshot.to_dict()
         
         today_str = datetime.date.today().isoformat()
@@ -117,4 +124,3 @@ def increment_usage(user_id: str) -> None:
     transaction = db.transaction()
     new_usage_count = update_in_transaction(transaction, user_ref)
     print(f"Usage for user {user_id} incremented to {new_usage_count}")
-

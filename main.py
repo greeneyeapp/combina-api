@@ -1,22 +1,19 @@
 import uvicorn
-import firebase_admin
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
-from firebase_admin import credentials
+from fastapi.middleware.cors import CORSMiddleware
 import json
+import asyncio
 
+# --- DEĞİŞİKLİK: Firebase başlatma kodları kaldırıldı ---
+# Bu işlem artık 'core.database' modülü ilk yüklendiğinde otomatik olarak yapılıyor.
+# Sadece 'db' nesnesini import etmemiz, başlatma için yeterlidir.
+from core.database import db
 from core.config import settings
 
-# Firebase Admin SDK'yı başlat
-try:
-    cred = credentials.Certificate(settings.GOOGLE_APPLICATION_CREDENTIALS)
-    firebase_admin.initialize_app(cred)
-    print("✅ Firebase Admin SDK başarıyla başlatıldı.")
-except Exception as e:
-    print(f"❌ Firebase Admin SDK başlatılırken hata oluştu: {e}")
-
 # Router'ları import et
+# Bu satır, diğer dosyaların 'core.database' üzerinden 'db'ye erişmesini sağlar.
 from routers import auth, outfits, weather, users 
 
 app = FastAPI(
@@ -47,7 +44,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 print(f"❌ Sample wardrobe item keys: {list(sample_item.keys())}")
                 print(f"❌ Sample wardrobe item values:")
                 for key, value in sample_item.items():
-                    print(f"    {key}: {type(value).__name__} = {value}")
+                    print(f"      {key}: {type(value).__name__} = {value}")
                     
             # Context varsa log'la
             if 'context' in body_json:
@@ -60,11 +57,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     print(f"❌ VALIDATION ERRORS ({len(exc.errors())} total):")
     for i, error in enumerate(exc.errors()):
         print(f"  Error {i+1}:")
-        print(f"    Field: {error.get('loc')}")
-        print(f"    Message: {error.get('msg')}")
-        print(f"    Type: {error.get('type')}")
-        print(f"    Input: {str(error.get('input', 'N/A'))[:100]}...")
-        print("    ---")
+        print(f"     Field: {error.get('loc')}")
+        print(f"     Message: {error.get('msg')}")
+        print(f"     Type: {error.get('type')}")
+        print(f"     Input: {str(error.get('input', 'N/A'))[:100]}...")
+        print("     ---")
     print("❌ END OF VALIDATION ERRORS\n")
     
     return JSONResponse(
@@ -80,9 +77,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         }
     )
 
-# CORS Middleware (gerekirse ekleyin)
-from fastapi.middleware.cors import CORSMiddleware
-
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Production'da daha kısıtlayıcı olun
@@ -116,12 +111,10 @@ async def health_check():
 app.include_router(auth.router)
 app.include_router(weather.router)
 app.include_router(outfits.router)
+app.include_router(users.router)
+app.include_router(users.webhook_router)
 
-# Users router'ı - hem normal hem webhook router'ını dahil et
-app.include_router(users.router)  # /api/users prefix'li endpoints (authenticated only)
-app.include_router(users.webhook_router)  # /api prefix'li webhook endpoints (no auth)
-
-# Startup event'i - anonymous cache temizleme scheduler'ı başlat
+# Startup event'i
 @app.on_event("startup")
 async def startup_event():
     """Uygulama başlangıcında gerekli işlemleri yap"""
@@ -131,7 +124,6 @@ async def startup_event():
     print("✅ Multi-language outfit suggestions ready")
     
     # Anonymous cache temizleme scheduler'ı başlat (isteğe bağlı)
-    import asyncio
     from routers.outfits import cleanup_anonymous_cache
     
     async def periodic_cleanup():
