@@ -3,6 +3,7 @@ from datetime import timedelta, datetime
 from firebase_admin import firestore
 import requests
 import jwt
+import uuid
 from typing import Optional, Tuple
 from pydantic import BaseModel
 import secrets
