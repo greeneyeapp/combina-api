@@ -3,18 +3,28 @@ import firebase_admin
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
-from firebase_admin import credentials
+from firebase_admin import credentials, firestore
 import json
+import asyncio
 
 from core.config import settings
 
 # Firebase Admin SDK'yı başlat
 try:
     cred = credentials.Certificate(settings.GOOGLE_APPLICATION_CREDENTIALS)
-    firebase_admin.initialize_app(cred)
+    # Eğer uygulama yeniden yüklenirse (reload=True) tekrar başlatmayı önle
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
     print("✅ Firebase Admin SDK başarıyla başlatıldı.")
 except Exception as e:
     print(f"❌ Firebase Admin SDK başlatılırken hata oluştu: {e}")
+    raise e
+
+# --- EN ÖNEMLİ DÜZELTME ---
+# Firestore client'ını burada, router'lar import edilmeden HEMEN ÖNCE oluştur.
+# Bu sayede diğer tüm dosyalar bu 'db' nesnesine erişebilir.
+db = firestore.client()
+# --- DÜZELTME BİTTİ ---
 
 # Router'ları import et
 from routers import auth, outfits, weather, users 
@@ -47,7 +57,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 print(f"❌ Sample wardrobe item keys: {list(sample_item.keys())}")
                 print(f"❌ Sample wardrobe item values:")
                 for key, value in sample_item.items():
-                    print(f"    {key}: {type(value).__name__} = {value}")
+                    print(f"      {key}: {type(value).__name__} = {value}")
                     
             # Context varsa log'la
             if 'context' in body_json:
@@ -60,11 +70,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     print(f"❌ VALIDATION ERRORS ({len(exc.errors())} total):")
     for i, error in enumerate(exc.errors()):
         print(f"  Error {i+1}:")
-        print(f"    Field: {error.get('loc')}")
-        print(f"    Message: {error.get('msg')}")
-        print(f"    Type: {error.get('type')}")
-        print(f"    Input: {str(error.get('input', 'N/A'))[:100]}...")
-        print("    ---")
+        print(f"     Field: {error.get('loc')}")
+        print(f"     Message: {error.get('msg')}")
+        print(f"     Type: {error.get('type')}")
+        print(f"     Input: {str(error.get('input', 'N/A'))[:100]}...")
+        print("     ---")
     print("❌ END OF VALIDATION ERRORS\n")
     
     return JSONResponse(
@@ -131,7 +141,6 @@ async def startup_event():
     print("✅ Multi-language outfit suggestions ready")
     
     # Anonymous cache temizleme scheduler'ı başlat (isteğe bağlı)
-    import asyncio
     from routers.outfits import cleanup_anonymous_cache
     
     async def periodic_cleanup():

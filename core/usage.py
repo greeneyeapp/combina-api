@@ -13,7 +13,6 @@ from core.security import get_current_user_id
 PLAN_LIMITS = {
     "free": 2,
     "anonymous": 1,
-    "standard": 10,
     "premium": "unlimited"
 }
 
@@ -119,7 +118,7 @@ async def check_usage_limit(user_id_tuple: tuple = Depends(get_current_user_id))
 
 def can_upgrade_plan(current_plan: str) -> dict:
     """Kullanıcının yükseltebileceği planları döndürür"""
-    plans = ["free", "anonymous", "standard", "premium"]
+    plans = ["free", "anonymous", "premium"]
     
     if current_plan == "premium" or current_plan not in plans:
         return {

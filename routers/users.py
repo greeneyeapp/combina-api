@@ -170,7 +170,7 @@ async def update_user_plan(
         raise HTTPException(status_code=404, detail="User profile not found.")
     
     new_plan = plan_data.get("plan")
-    if new_plan not in ["free", "standard", "premium"]:
+    if new_plan not in ["free", "premium"]:
         raise HTTPException(status_code=400, detail="Invalid plan type.")
     
     user_ref.update({
@@ -392,8 +392,6 @@ def determine_plan_from_entitlements(entitlements):
     for entitlement_id, entitlement_info in entitlements.items():
         if entitlement_id == "premium_access" and entitlement_info.get("isActive", False):
             return "premium"
-        elif entitlement_id == "standard_access" and entitlement_info.get("isActive", False):
-            return "standard"
     return "free"
 
 def determine_plan_from_entitlements_webhook(entitlements):
@@ -403,8 +401,6 @@ def determine_plan_from_entitlements_webhook(entitlements):
         if expires_date is None:  # Aktif subscription
             if entitlement_id == "premium_access":
                 return "premium"
-            elif entitlement_id == "standard_access":
-                return "standard"
     return "free"
 
 def verify_webhook_signature(signature: str, body: bytes) -> bool:
