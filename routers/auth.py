@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 from pydantic import BaseModel
 import secrets
 from core.security import create_access_token, get_current_user_id, require_authenticated_user
+from core.usage import get_or_create_daily_usage
 from core.config import settings
 from schemas import AnonymousSessionStart, AnonymousSessionResponse, UserProfileResponse
 

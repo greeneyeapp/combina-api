@@ -1,73 +1,120 @@
-from fastapi import Depends, HTTPException, status
-from datetime import date
-from .security import get_current_user_id
+# kodlar/core/usage.py
 
-USER_DATA_DB = {
-    "user_firebase_uid_1": {
-        "plan": "standard",  # 'free', 'standard', 'premium'
-        "usage": {"count": 0, "date": "2025-06-12"}
-    },
-    "user_firebase_uid_2": {
-        "plan": "free",
-        "usage": {"count": 1, "date": "2025-06-12"}
-    },
-    "user_firebase_uid_3": {
-        "plan": "premium",
-        "usage": {"count": 0, "date": "2025-06-12"}
-    },
-    "default_user": {
-        "plan": "free",
-        "usage": {"count": 0, "date": "2025-01-01"}
-    }
-}
+import datetime
+from google.cloud import firestore
+from typing import Union
 
+# Proje içi importlar
+from ..main import db  # db Firestore client'ını ana dosyadan alıyoruz
+from ..schemas import DailyUsage
+
+# Plan limitlerini merkezi bir yerde tanımlıyoruz
 PLAN_LIMITS = {
     "free": 2,
+    "anonymous": 1,
     "standard": 10,
-    "premium": 50
+    "premium": "unlimited"  # Client tarafında da bu şekilde yönetiliyor
 }
 
-async def check_usage_limit(user_id: str = Depends(get_current_user_id)):
-    today = str(date.today())
+def get_or_create_daily_usage(user_id: str) -> DailyUsage:
+    """
+    Kullanıcının günlük kullanım hakkını Firestore'dan alır veya oluşturur.
     
-    user_data = USER_DATA_DB.get(user_id, USER_DATA_DB["default_user"])
-    
-    if user_data["usage"]["date"] != today:
-        user_data["usage"]["count"] = 0
-        user_data["usage"]["date"] = today
+    Args:
+        user_id (str): Firestore'daki kullanıcı ID'si.
 
-    limit = PLAN_LIMITS.get(user_data["plan"], 0)
-
-    if user_data["usage"]["count"] >= limit:
-        plan_name = user_data["plan"].capitalize()
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Daily limit of {limit} requests reached for {plan_name} plan. Please upgrade your plan or try again tomorrow."
-        )
+    Returns:
+        DailyUsage: Kullanıcının güncel kullanım durumunu içeren Pydantic modeli.
+    """
+    # 1. Kullanıcının planını öğrenmek için ana dokümanını al
+    user_ref = db.collection('users').document(user_id)
+    user_doc = user_ref.get()
     
-    return user_id
+    if not user_doc.exists:
+        # Bu durum normalde yaşanmamalı, ama bir güvenlik önlemi olarak
+        # kullanıcı bulunamazsa varsayılan anonim planını kullan.
+        plan = "anonymous"
+        user_data = {}
+    else:
+        user_data = user_doc.to_dict()
+        plan = user_data.get("plan", "anonymous")
 
-def increment_usage(user_id: str):
-    user_data = USER_DATA_DB.get(user_id, USER_DATA_DB["default_user"])
-    user_data["usage"]["count"] += 1
-    print(f"Usage for user {user_id} incremented to {user_data['usage']['count']} (Plan: {user_data['plan']})")
+    # 2. Bugünün tarihini al (YYYY-MM-DD formatında)
+    today_str = datetime.date.today().isoformat()
 
-def can_upgrade_plan(current_plan: str) -> dict:
-    """Kullanıcının yükseltebileceği planları döndürür"""
-    plans = ["free", "standard", "premium"]
-    current_index = plans.index(current_plan) if current_plan in plans else 0
+    # 3. Firestore'daki 'usage' alanını kontrol et
+    usage_data = user_data.get("usage")
     
-    available_upgrades = []
-    for i in range(current_index + 1, len(plans)):
-        plan = plans[i]
-        available_upgrades.append({
-            "plan": plan,
-            "daily_limit": PLAN_LIMITS[plan],
-            "upgrade_available": True
-        })
+    # 4. Eğer 'usage' alanı varsa ve tarihi bugünse, mevcut veriyi kullan.
+    #    Yoksa veya tarihi eskiyse, bugünün verisini sıfırdan oluştur.
+    if usage_data and usage_data.get("date") == today_str:
+        current_usage = usage_data.get("count", 0)
+        rewarded_count = usage_data.get("rewarded_count", 0)
+    else:
+        current_usage = 0
+        rewarded_count = 0
+        # Firestore'da bugünün yeni kullanım kaydını oluştur/güncelle
+        new_usage_data = {
+            "date": today_str,
+            "count": current_usage,
+            "rewarded_count": rewarded_count
+        }
+        user_ref.update({"usage": new_usage_data})
+
+    # 5. Kalan hakları ve yüzdeyi hesapla
+    daily_limit = PLAN_LIMITS.get(plan, 1)  # Bilinmeyen bir plan varsa 1 hak ver
     
-    return {
-        "current_plan": current_plan,
-        "current_limit": PLAN_LIMITS.get(current_plan, 0),
-        "available_upgrades": available_upgrades
-    }
+    if daily_limit == "unlimited":
+        remaining = "unlimited"
+        percentage_used = 0.0
+    else:
+        total_available = daily_limit + rewarded_count
+        remaining = max(0, total_available - current_usage)
+        percentage_used = (current_usage / total_available) * 100 if total_available > 0 else 0
+
+    # 6. auth.py'nin beklediği Pydantic modelini doldurup döndür
+    return DailyUsage(
+        daily_limit=daily_limit,
+        rewarded_count=rewarded_count,
+        current_usage=current_usage,
+        remaining=remaining,
+        percentage_used=round(percentage_used, 2),
+        date=today_str
+    )
+
+def increment_usage(user_id: str) -> None:
+    """
+    Kullanıcının o günkü kullanım sayısını 1 artırır.
+    Bu fonksiyon, başarılı bir kombin önerisinden sonra çağrılmalıdır.
+    """
+    user_ref = db.collection('users').document(user_id)
+    
+    # Firestore'da atomik (güvenli) bir artırma işlemi için transaction kullan
+    @firestore.transactional
+    def update_in_transaction(transaction, user_ref):
+        snapshot = user_ref.get(transaction=transaction)
+        user_data = snapshot.to_dict()
+        
+        today_str = datetime.date.today().isoformat()
+        usage_data = user_data.get("usage")
+
+        if usage_data and usage_data.get("date") == today_str:
+            # Bugün için zaten bir kayıt var, sadece sayacı artır
+            new_count = usage_data.get("count", 0) + 1
+            transaction.update(user_ref, {"usage.count": new_count})
+        else:
+            # Bugünün ilk kullanımı, yeni bir kayıt oluştur
+            new_count = 1
+            transaction.update(user_ref, {
+                "usage": {
+                    "date": today_str,
+                    "count": new_count,
+                    "rewarded_count": 0
+                }
+            })
+        return new_count
+
+    transaction = db.transaction()
+    new_usage_count = update_in_transaction(transaction, user_ref)
+    print(f"Usage for user {user_id} incremented to {new_usage_count}")
+
