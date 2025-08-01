@@ -25,6 +25,94 @@ webhook_router = APIRouter(
 
 db = firestore.client()
 
+# YENİ: Anonymous ve authenticated kullanıcılar için birleşik profil endpoint'i
+@webhook_router.get("/users/profile")  # webhook_router kullanıyoruz çünkü auth gerektirmiyor
+async def get_user_profile_universal(
+    request: Request,
+    user_data: Tuple[str, bool] = Depends(get_current_user_id)
+):
+    """Hem anonymous hem authenticated kullanıcılar için profil bilgileri"""
+    user_id, is_anonymous = user_data
+    
+    if is_anonymous:
+        # Anonymous kullanıcı için temel bilgiler döndür
+        from routers.outfits import get_anonymous_user_usage, PLAN_LIMITS
+        
+        usage_data = get_anonymous_user_usage(user_id)
+        daily_limit = PLAN_LIMITS.get("anonymous", 1)
+        current_usage = usage_data.get("count", 0)
+        remaining = max(0, daily_limit - current_usage)
+        percentage_used = (current_usage / daily_limit) * 100 if daily_limit > 0 else 0
+        
+        return {
+            "user_id": user_id,
+            "type": "anonymous",
+            "plan": "anonymous",
+            "usage": {
+                "daily_limit": daily_limit,
+                "current_usage": current_usage,
+                "remaining": remaining,
+                "percentage_used": round(percentage_used, 2),
+                "date": str(date.today())
+            },
+            "is_anonymous": True,
+            "profile_complete": False
+        }
+    
+    else:
+        # Authenticated kullanıcı (mevcut mantık)
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        
+        user_data_dict = user_doc.to_dict()
+        today_str = str(date.today())
+        
+        usage_data = user_data_dict.get("usage", {})
+        
+        if usage_data.get("date") != today_str:
+            print(f"🔄 Day has changed. Resetting usage for user {user_id[:8]}.")
+            usage_data = {"count": 0, "date": today_str, "rewarded_count": 0}
+            user_ref.update({"usage": usage_data})
+        
+        plan = user_data_dict.get("plan", "free")
+        
+        plan_limits = {"free": 2, "premium": None}
+        daily_limit = plan_limits.get(plan, 2)
+        
+        current_usage = usage_data.get("count", 0)
+        rewarded_count = usage_data.get("rewarded_count", 0)
+        
+        if plan == "premium":
+            effective_limit = None
+            remaining = "unlimited"
+            percentage_used = 0
+        else:
+            effective_limit = daily_limit + rewarded_count
+            remaining = max(0, effective_limit - current_usage)
+            percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
+        
+        return {
+            "user_id": user_id,
+            "fullname": user_data_dict.get("fullname"),
+            "email": user_data_dict.get("email"),
+            "gender": user_data_dict.get("gender"),
+            "plan": plan,
+            "usage": {
+                "daily_limit": "unlimited" if daily_limit is None else daily_limit,
+                "rewarded_count": rewarded_count,
+                "current_usage": current_usage,
+                "remaining": remaining,
+                "percentage_used": percentage_used,
+                "date": today_str
+            },
+            "created_at": user_data_dict.get("createdAt"),
+            "is_anonymous": False,
+            "profile_complete": bool(user_data_dict.get("fullname") and user_data_dict.get("gender"))
+        }
+
 @router.post("/init-profile")
 async def create_user_profile(
     profile: ProfileInit, 
@@ -53,9 +141,10 @@ async def create_user_profile(
         }
     }
 
+# ESKİ profile endpoint'ini authenticated-only olarak koru
 @router.get("/profile")
-async def get_user_profile(user_id: str = Depends(require_authenticated_user)):
-    """Sadece authenticated kullanıcılar için profil bilgileri"""
+async def get_authenticated_user_profile(user_id: str = Depends(require_authenticated_user)):
+    """Sadece authenticated kullanıcılar için eski profil endpoint'i (backward compatibility)"""
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
     
