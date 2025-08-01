@@ -13,8 +13,8 @@ from schemas import ProfileInit
 # Users router (authentication gerektirir)
 router = APIRouter(
     prefix="/api/users",
-    tags=["users"],
-    dependencies=[Depends(require_authenticated_user)]  # Bu endpoint'ler sadece authenticated kullanıcılar için
+    tags=["users"]
+    # dependencies=[Depends(require_authenticated_user)] kaldırıldı - endpoint bazında kontrol edilecek
 )
 
 # RevenueCat webhook için ayrı router (authentication gerektirmez)
@@ -26,7 +26,7 @@ webhook_router = APIRouter(
 db = firestore.client()
 
 # YENİ: Anonymous ve authenticated kullanıcılar için birleşik profil endpoint'i
-@webhook_router.get("/users/profile")  # webhook_router kullanıyoruz çünkü auth gerektirmiyor
+@router.get("/profile")  # Ana router kullanıyoruz: /api/users/profile
 async def get_user_profile_universal(
     request: Request,
     user_data: Tuple[str, bool] = Depends(get_current_user_id)
@@ -116,7 +116,7 @@ async def get_user_profile_universal(
 @router.post("/init-profile")
 async def create_user_profile(
     profile: ProfileInit, 
-    user_id: str = Depends(require_authenticated_user)
+    user_id: str = Depends(require_authenticated_user)  # Authentication gerekli
 ):
     """Sadece authenticated kullanıcılar için profil oluşturma"""
     user_ref = db.collection('users').document(user_id)
@@ -141,64 +141,16 @@ async def create_user_profile(
         }
     }
 
-# ESKİ profile endpoint'ini authenticated-only olarak koru
-@router.get("/profile")
-async def get_authenticated_user_profile(user_id: str = Depends(require_authenticated_user)):
-    """Sadece authenticated kullanıcılar için eski profil endpoint'i (backward compatibility)"""
-    user_ref = db.collection('users').document(user_id)
-    user_doc = user_ref.get()
-    
-    if not user_doc.exists:
-        raise HTTPException(status_code=404, detail="User profile not found.")
-    
-    user_data = user_doc.to_dict()
-    today_str = str(date.today())
-    
-    usage_data = user_data.get("usage", {})
-    
-    if usage_data.get("date") != today_str:
-        print(f"🔄 Day has changed. Resetting usage for user {user_id[:8]}.")
-        usage_data = {"count": 0, "date": today_str, "rewarded_count": 0}
-        user_ref.update({"usage": usage_data})
-    
-    plan = user_data.get("plan", "free")
-    
-    plan_limits = {"free": 2, "premium": None}
-    daily_limit = plan_limits.get(plan, 2)
-    
-    current_usage = usage_data.get("count", 0)
-    rewarded_count = usage_data.get("rewarded_count", 0)
-    
-    if plan == "premium":
-        effective_limit = None
-        remaining = "unlimited"
-        percentage_used = 0
-    else:
-        effective_limit = daily_limit + rewarded_count
-        remaining = max(0, effective_limit - current_usage)
-        percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
-    
-    return {
-        "user_id": user_id,
-        "fullname": user_data.get("fullname"),
-        "email": user_data.get("email"),
-        "gender": user_data.get("gender"),
-        "plan": plan,
-        "usage": {
-            "daily_limit": "unlimited" if daily_limit is None else daily_limit,
-            "rewarded_count": rewarded_count,
-            "current_usage": current_usage,
-            "remaining": remaining,
-            "percentage_used": percentage_used,
-            "date": today_str
-        },
-        "created_at": user_data.get("createdAt")
-    }
+# ESKİ profile endpoint'ini authenticated-only olarak koru (KALDIRILDI - çakışmayı önlemek için)
+# @router.get("/profile")
+# async def get_authenticated_user_profile(user_id: str = Depends(require_authenticated_user)):
+#     """Bu endpoint kaldırıldı - get_user_profile_universal kullanılıyor"""
+#     pass
 
 @router.patch("/plan")
 async def update_user_plan(
     plan_data: dict = Body(...), 
-    user_id: str = Depends(require_authenticated_user)
+    user_id: str = Depends(require_authenticated_user)  # Authentication gerekli
 ):
     """Sadece authenticated kullanıcılar için plan güncelleme"""
     user_ref = db.collection('users').document(user_id)
@@ -225,7 +177,7 @@ async def update_user_plan(
 @router.post("/verify-purchase")
 async def verify_purchase(
     verification_data: dict = Body(...),
-    user_id: str = Depends(require_authenticated_user)
+    user_id: str = Depends(require_authenticated_user)  # Authentication gerekli
 ):
     """Sadece authenticated kullanıcılar için satın alma doğrulama"""
     try:
@@ -254,7 +206,9 @@ async def verify_purchase(
         raise HTTPException(status_code=500, detail="Purchase verification failed")
 
 @router.post("/increment-usage")
-async def increment_suggestion_usage(user_id: str = Depends(require_authenticated_user)):
+async def increment_suggestion_usage(
+    user_id: str = Depends(require_authenticated_user)  # Authentication gerekli
+):
     """Sadece authenticated kullanıcılar için kullanım artırma"""
     try:
         user_ref = db.collection('users').document(user_id)
@@ -289,7 +243,9 @@ async def increment_suggestion_usage(user_id: str = Depends(require_authenticate
         raise HTTPException(status_code=500, detail="Failed to increment usage")
 
 @router.post("/grant-extra-suggestion")
-async def grant_rewarded_suggestion(user_id: str = Depends(require_authenticated_user)):
+async def grant_rewarded_suggestion(
+    user_id: str = Depends(require_authenticated_user)  # Authentication gerekli
+):
     """Sadece authenticated kullanıcılar için reklam karşılığı ekstra hak verme"""
     try:
         user_ref = db.collection('users').document(user_id)
@@ -318,7 +274,9 @@ async def grant_rewarded_suggestion(user_id: str = Depends(require_authenticated
         raise HTTPException(status_code=500, detail="Failed to grant rewarded suggestion right.")
     
 @router.delete("/delete-account")
-async def delete_user_account(user_id: str = Depends(require_authenticated_user)):
+async def delete_user_account(
+    user_id: str = Depends(require_authenticated_user)  # Authentication gerekli
+):
     """Sadece authenticated kullanıcılar için hesap silme"""
     try:
         user_ref = db.collection('users').document(user_id)
