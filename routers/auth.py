@@ -168,6 +168,7 @@ async def start_anonymous_session(
                 "gender": user_info.gender or "unisex",
                 "language": user_info.language or "en",
                 "createdAt": firestore.SERVER_TIMESTAMP,
+                "profile_incomplete": True,
                 "usage": {
                     "count": 0, 
                     "date": datetime.now().strftime("%Y-%m-%d"),
