@@ -12,16 +12,20 @@ from core.config import settings
 try:
     cred = credentials.Certificate(settings.GOOGLE_APPLICATION_CREDENTIALS)
     firebase_admin.initialize_app(cred)
-    print("Firebase Admin SDK başarıyla başlatıldı.")
+    print("✅ Firebase Admin SDK başarıyla başlatıldı.")
 except Exception as e:
-    print(f"Firebase Admin SDK başlatılırken hata oluştu: {e}")
+    print(f"❌ Firebase Admin SDK başlatılırken hata oluştu: {e}")
 
 # Router'ları import et
 from routers import auth, outfits, weather, users 
 
-app = FastAPI(title="Combina API")
+app = FastAPI(
+    title="Combina API", 
+    description="Fashion outfit suggestion API with anonymous user support",
+    version="2.0.0"
+)
 
-# 422 HATA DEBUG MIDDLEWARE - BU KISMI EKLEYİN
+# 422 HATA DEBUG MIDDLEWARE
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """422 hatalarını detaylı şekilde log'la"""
@@ -59,7 +63,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         print(f"    Field: {error.get('loc')}")
         print(f"    Message: {error.get('msg')}")
         print(f"    Type: {error.get('type')}")
-        print(f"    Input: {str(error.get('input', 'N/A'))[:100]}...")  # İlk 100 karakter
+        print(f"    Input: {str(error.get('input', 'N/A'))[:100]}...")
         print("    ---")
     print("❌ END OF VALIDATION ERRORS\n")
     
@@ -76,10 +80,37 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         }
     )
 
-# Root endpoint'i sadece bir kere tanımla
+# CORS Middleware (gerekirse ekleyin)
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Production'da daha kısıtlayıcı olun
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Root endpoint'i
 @app.get("/")
 async def root_redirect():
     return RedirectResponse(url="/docs")
+
+@app.get("/health")
+async def health_check():
+    """API durumu kontrolü - anonymous kullanıcılar için de erişilebilir"""
+    return {
+        "status": "healthy",
+        "service": "Combina API",
+        "version": "2.0.0",
+        "features": [
+            "authenticated_users",
+            "anonymous_users", 
+            "outfit_suggestions",
+            "weather_integration",
+            "multilingual_support"
+        ]
+    }
 
 # Router'ları dahil et
 app.include_router(auth.router)
@@ -87,8 +118,39 @@ app.include_router(weather.router)
 app.include_router(outfits.router)
 
 # Users router'ı - hem normal hem webhook router'ını dahil et
-app.include_router(users.router)  # /api/users prefix'li endpoints
-app.include_router(users.webhook_router)  # /api prefix'li webhook endpoints
+app.include_router(users.router)  # /api/users prefix'li endpoints (authenticated only)
+app.include_router(users.webhook_router)  # /api prefix'li webhook endpoints (no auth)
+
+# Startup event'i - anonymous cache temizleme scheduler'ı başlat
+@app.on_event("startup")
+async def startup_event():
+    """Uygulama başlangıcında gerekli işlemleri yap"""
+    print("🚀 Combina API starting up...")
+    print("✅ Anonymous user support enabled")
+    print("✅ Authenticated user support enabled")
+    print("✅ Multi-language outfit suggestions ready")
+    
+    # Anonymous cache temizleme scheduler'ı başlat (isteğe bağlı)
+    import asyncio
+    from routers.outfits import cleanup_anonymous_cache
+    
+    async def periodic_cleanup():
+        """Her 1 saatte bir anonymous cache'i temizle"""
+        while True:
+            await asyncio.sleep(3600)  # 1 saat bekle
+            try:
+                cleanup_anonymous_cache()
+            except Exception as e:
+                print(f"❌ Anonymous cache cleanup error: {e}")
+    
+    # Arka planda cleanup task'ını başlat
+    asyncio.create_task(periodic_cleanup())
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=9002, reload=True)
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=9002, 
+        reload=True,
+        log_level="info"
+    )

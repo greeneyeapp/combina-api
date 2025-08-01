@@ -1,6 +1,7 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from datetime import datetime, timedelta
+from typing import Tuple
 
 from core.config import settings
 from core.security import get_current_user_id
@@ -8,7 +9,7 @@ from core.security import get_current_user_id
 router = APIRouter(
     prefix="/api",
     tags=["weather"],
-    dependencies=[Depends(get_current_user_id)]
+    dependencies=[Depends(get_current_user_id)]  # Hem authenticated hem anonymous kullanıcılar için
 )
 
 WEATHER_CACHE = {}
@@ -71,7 +72,22 @@ async def _get_city_name(lat: float, lon: float) -> str:
     return city_name
 
 @router.get("/weather")
-async def get_weather_data(lat: float, lon: float):
+async def get_weather_data(
+    request: Request,
+    lat: float, 
+    lon: float,
+    user_data: Tuple[str, bool] = Depends(get_current_user_id)
+):
+    """
+    Hava durumu verilerini döndürür.
+    Hem authenticated hem anonymous kullanıcılar için erişilebilir.
+    """
+    user_id, is_anonymous = user_data
+    
+    # User tipini log'la
+    user_type = "anonymous" if is_anonymous else "authenticated"
+    print(f"🌤️ Weather request from {user_type} user: {user_id[:16]}...")
+    
     city_name = await _get_city_name(lat, lon)
     cache_key = f"weather_{city_name.lower()}"
     current_time = datetime.utcnow()
@@ -80,6 +96,7 @@ async def get_weather_data(lat: float, lon: float):
     if cache_key in WEATHER_CACHE:
         cached_data = WEATHER_CACHE[cache_key]
         if current_time - cached_data["timestamp"] < CACHE_DURATION:
+            print(f"✅ Serving cached weather data for {city_name}")
             return cached_data["data"]
 
     # API'den güncel veri çek
@@ -106,9 +123,19 @@ async def get_weather_data(lat: float, lon: float):
                 "timestamp": current_time,
                 "data": weather_data
             }
+            
+            print(f"✅ Fresh weather data cached for {city_name}")
             return weather_data
             
         except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"Error from OpenWeatherMap: {e.response.text}")
+            print(f"❌ Weather API error for {user_type} user: {e.response.status_code}")
+            raise HTTPException(
+                status_code=e.response.status_code, 
+                detail=f"Error from OpenWeatherMap: {e.response.text}"
+            )
         except httpx.RequestError:
-            raise HTTPException(status_code=503, detail="Could not connect to OpenWeatherMap API.")
+            print(f"❌ Weather API connection error for {user_type} user")
+            raise HTTPException(
+                status_code=503, 
+                detail="Could not connect to OpenWeatherMap API."
+            )

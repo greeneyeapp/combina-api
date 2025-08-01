@@ -2,18 +2,19 @@ from fastapi import APIRouter, Depends, Body, Request, HTTPException
 from firebase_admin import firestore
 from pydantic import BaseModel
 from datetime import datetime, date
+from typing import Tuple
 import hmac
 import hashlib
 import os
 
-from core.security import get_current_user_id
+from core.security import get_current_user_id, require_authenticated_user
 from schemas import ProfileInit
 
 # Users router (authentication gerektirir)
 router = APIRouter(
     prefix="/api/users",
     tags=["users"],
-    dependencies=[Depends(get_current_user_id)]
+    dependencies=[Depends(require_authenticated_user)]  # Bu endpoint'ler sadece authenticated kullanıcılar için
 )
 
 # RevenueCat webhook için ayrı router (authentication gerektirmez)
@@ -25,10 +26,14 @@ webhook_router = APIRouter(
 db = firestore.client()
 
 @router.post("/init-profile")
-async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_current_user_id)):
+async def create_user_profile(
+    profile: ProfileInit, 
+    user_id: str = Depends(require_authenticated_user)
+):
+    """Sadece authenticated kullanıcılar için profil oluşturma"""
     user_ref = db.collection('users').document(user_id)
     
-    # Profil verilerini hazırla (Doğum tarihi ve yaş kaldırıldı)
+    # Profil verilerini hazırla
     profile_data = {
         "plan": "free",
         "gender": profile.gender,
@@ -38,7 +43,6 @@ async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_c
     
     user_ref.set(profile_data, merge=True)
     
-    # Yanıttan yaş kaldırıldı
     return {
         "status": "success", 
         "message": f"Profile for user {user_id} initialized.",
@@ -50,8 +54,8 @@ async def create_user_profile(profile: ProfileInit, user_id: str = Depends(get_c
     }
 
 @router.get("/profile")
-async def get_user_profile(user_id: str = Depends(get_current_user_id)):
-    """Kullanıcının profil bilgilerini döndürür (Veri tutarlılığı ve sıfırlama mantığı düzeltildi)"""
+async def get_user_profile(user_id: str = Depends(require_authenticated_user)):
+    """Sadece authenticated kullanıcılar için profil bilgileri"""
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
     
@@ -85,7 +89,6 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
         remaining = max(0, effective_limit - current_usage)
         percentage_used = round((current_usage / effective_limit) * 100, 1) if effective_limit > 0 else 0
     
-    # Yanıttan 'age' ve 'birthDate' kaldırıldı
     return {
         "user_id": user_id,
         "fullname": user_data.get("fullname"),
@@ -106,9 +109,9 @@ async def get_user_profile(user_id: str = Depends(get_current_user_id)):
 @router.patch("/plan")
 async def update_user_plan(
     plan_data: dict = Body(...), 
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(require_authenticated_user)
 ):
-    """Kullanıcının planını günceller (subscription işlemleri için)"""
+    """Sadece authenticated kullanıcılar için plan güncelleme"""
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
     
@@ -133,9 +136,9 @@ async def update_user_plan(
 @router.post("/verify-purchase")
 async def verify_purchase(
     verification_data: dict = Body(...),
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(require_authenticated_user)
 ):
-    """Client'ten gelen purchase verification'ı handle eder"""
+    """Sadece authenticated kullanıcılar için satın alma doğrulama"""
     try:
         customer_info = verification_data.get("customer_info", {})
         
@@ -162,8 +165,8 @@ async def verify_purchase(
         raise HTTPException(status_code=500, detail="Purchase verification failed")
 
 @router.post("/increment-usage")
-async def increment_suggestion_usage(user_id: str = Depends(get_current_user_id)):
-    """Suggestion kullanımını artırır"""
+async def increment_suggestion_usage(user_id: str = Depends(require_authenticated_user)):
+    """Sadece authenticated kullanıcılar için kullanım artırma"""
     try:
         user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get()
@@ -174,12 +177,10 @@ async def increment_suggestion_usage(user_id: str = Depends(get_current_user_id)
         user_data = user_doc.to_dict()
         today = str(date.today())
         
-        # Günlük usage'ı kontrol et ve gerekirse sıfırla
         current_usage = user_data.get("usage", {})
         if current_usage.get("date") != today:
             current_usage = {"count": 0, "date": today}
         
-        # Usage'ı artır
         new_count = current_usage.get("count", 0) + 1
         updated_usage = {"count": new_count, "date": today}
         
@@ -197,6 +198,57 @@ async def increment_suggestion_usage(user_id: str = Depends(get_current_user_id)
     except Exception as e:
         print(f"Usage increment error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to increment usage")
+
+@router.post("/grant-extra-suggestion")
+async def grant_rewarded_suggestion(user_id: str = Depends(require_authenticated_user)):
+    """Sadece authenticated kullanıcılar için reklam karşılığı ekstra hak verme"""
+    try:
+        user_ref = db.collection('users').document(user_id)
+        today = str(date.today())
+        
+        usage_data = user_ref.get(field_paths={'usage'}).to_dict().get('usage', {})
+        
+        if usage_data.get("date") != today:
+            usage_data = {"count": 0, "date": today, "rewarded_count": 0}
+
+        new_rewarded_count = usage_data.get("rewarded_count", 0) + 1
+        usage_data["rewarded_count"] = new_rewarded_count
+        
+        user_ref.update({"usage": usage_data})
+        
+        return {
+            "status": "success",
+            "message": "Rewarded suggestion right granted.",
+            "data": {
+                "new_rewarded_count": new_rewarded_count,
+                "date": today
+            }
+        }
+    except Exception as e:
+        print(f"Error granting rewarded suggestion: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to grant rewarded suggestion right.")
+    
+@router.delete("/delete-account")
+async def delete_user_account(user_id: str = Depends(require_authenticated_user)):
+    """Sadece authenticated kullanıcılar için hesap silme"""
+    try:
+        user_ref = db.collection('users').document(user_id)
+        
+        user_doc = user_ref.get()
+        if not user_doc.exists:
+            return {"status": "success", "message": "User document not found, assumed already deleted."}
+
+        user_ref.delete()
+        print(f"🗑️ Firestore document for user {user_id} deleted.")
+
+        return {"status": "success", "message": "Account permanently deleted from database."}
+
+    except Exception as e:
+        print(f"❌ Error deleting account for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="An error occurred while deleting the account. Please try again later."
+        )
 
 # RevenueCat Webhook Handler (authentication gerektirmez)
 @webhook_router.post("/revenuecat-webhook")
@@ -280,7 +332,6 @@ async def handle_revenuecat_webhook(request: Request):
 
 def determine_plan_from_entitlements(entitlements):
     """Client'ten gelen RevenueCat entitlement'larından plan tipini belirler"""
-    # Client'ten gelen entitlements formatı
     for entitlement_id, entitlement_info in entitlements.items():
         if entitlement_id == "premium_access" and entitlement_info.get("isActive", False):
             return "premium"
@@ -290,9 +341,7 @@ def determine_plan_from_entitlements(entitlements):
 
 def determine_plan_from_entitlements_webhook(entitlements):
     """Webhook'tan gelen RevenueCat entitlement'larından plan tipini belirler"""
-    # Webhook'tan gelen entitlements formatı - expires_date kontrolü
     for entitlement_id, entitlement_info in entitlements.items():
-        # expires_date null ise aktif subscription, null değilse expired
         expires_date = entitlement_info.get("expires_date")
         if expires_date is None:  # Aktif subscription
             if entitlement_id == "premium_access":
@@ -307,7 +356,6 @@ def verify_webhook_signature(signature: str, body: bytes) -> bool:
         print("Warning: No signature provided")
         return False
     
-    # RevenueCat webhook secret'ını environment variable'dan al
     webhook_secret = os.getenv("REVENUECAT_WEBHOOK_SECRET")
     
     if not webhook_secret:
@@ -315,14 +363,12 @@ def verify_webhook_signature(signature: str, body: bytes) -> bool:
         return True  # Development için geçici
     
     try:
-        # RevenueCat signature verification
         expected_signature = hmac.new(
             webhook_secret.encode('utf-8'),
             body,
             hashlib.sha256
         ).hexdigest()
         
-        # Signature formatı kontrolü
         received_signature = signature
         if signature.startswith('sha256='):
             received_signature = signature[7:]
@@ -337,68 +383,3 @@ def verify_webhook_signature(signature: str, body: bytes) -> bool:
     except Exception as e:
         print(f"Signature verification error: {e}")
         return False
-    
-@router.post("/grant-extra-suggestion")
-async def grant_rewarded_suggestion(user_id: str = Depends(get_current_user_id)):
-    """Kullanıcıya reklam izlemesi karşılığında bir ekstra öneri hakkı verir."""
-    try:
-        user_ref = db.collection('users').document(user_id)
-        today = str(date.today())
-        
-        # Kullanıcının bugünkü kullanım verisini al
-        usage_data = user_ref.get(field_paths={'usage'}).to_dict().get('usage', {})
-        
-        # Eğer gün farklıysa, sıfırdan bir usage objesi oluştur
-        if usage_data.get("date") != today:
-            usage_data = {"count": 0, "date": today, "rewarded_count": 0}
-
-        # Ödüllü hak sayısını 1 artır
-        new_rewarded_count = usage_data.get("rewarded_count", 0) + 1
-        usage_data["rewarded_count"] = new_rewarded_count
-        
-        # Veritabanını güncelle
-        user_ref.update({"usage": usage_data})
-        
-        return {
-            "status": "success",
-            "message": "Rewarded suggestion right granted.",
-            "data": {
-                "new_rewarded_count": new_rewarded_count,
-                "date": today
-            }
-        }
-    except Exception as e:
-        print(f"Error granting rewarded suggestion: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to grant rewarded suggestion right.")
-    
-@router.delete("/delete-account")
-async def delete_user_account(user_id: str = Depends(get_current_user_id)):
-    """
-    Kullanıcıyı ve ilişkili tüm verilerini Firestore'dan kalıcı olarak siler.
-    Bu işlem geri alınamaz.
-    """
-    try:
-        # 1. Firestore'dan kullanıcı dökümanını sil
-        user_ref = db.collection('users').document(user_id)
-        
-        # 'await' kaldırıldı, get() senkron çalışır.
-        user_doc = user_ref.get()
-        if not user_doc.exists:
-            # Kullanıcı zaten yoksa, işlemi başarılı kabul et.
-            return {"status": "success", "message": "User document not found, assumed already deleted."}
-
-        # 'await' kaldırıldı, delete() senkron çalışır.
-        user_ref.delete()
-        print(f"🗑️ Firestore document for user {user_id} deleted.")
-
-        # 2. (İsteğe Bağlı) Bu kullanıcıya ait diğer verileri (gardırop, kombinler vb.)
-        # farklı koleksiyonlarda tutuyorsanız, onları da buradan silebilirsiniz.
-
-        return {"status": "success", "message": "Account permanently deleted from database."}
-
-    except Exception as e:
-        print(f"❌ Error deleting account for user {user_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail="An error occurred while deleting the account. Please try again later."
-        )
