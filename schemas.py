@@ -107,3 +107,38 @@ class PlanUpdateRequest(BaseModel):
 
 class PurchaseVerification(BaseModel):
     customer_info: dict
+    
+class AnonymousSessionStart(BaseModel):
+    session_id: str
+    language: str
+    gender: str
+    anonymous_id: Optional[str] = None
+
+# --- YENİ EKLENEN MODELLER ---
+
+class DailyUsage(BaseModel):
+    """Kullanım durumu için model."""
+    daily_limit: Union[int, str]
+    rewarded_count: int
+    current_usage: int
+    remaining: Union[int, str]
+    percentage_used: float
+    date: str
+
+class UserProfileResponse(BaseModel):
+    """Kullanıcı profili yanıtı için genel model."""
+    user_id: str
+    fullname: Optional[str] = None
+    email: Optional[str] = None
+    gender: Optional[str] = None
+    plan: str
+    usage: DailyUsage
+    created_at: Optional[Any] = None
+    isAnonymous: bool
+    profile_complete: bool
+
+class AnonymousSessionResponse(BaseModel):
+    """Anonim oturum başlatma yanıtı için model."""
+    session_id: str
+    access_token: str
+    user_info: UserProfileResponse

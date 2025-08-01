@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import secrets
 from core.security import create_access_token, get_current_user_id, require_authenticated_user
 from core.config import settings
+from schemas import AnonymousSessionStart, AnonymousSessionResponse, UserProfileResponse
 
 router = APIRouter()
 db = firestore.client()
@@ -140,73 +141,75 @@ async def apple_auth(request: AppleAuthRequest):
             detail="Apple authentication failed."
         )
 
-@router.post("/auth/anonymous")
-async def start_anonymous_session(
-    request: Request,
-    user_info: AnonymousUserInfo
-):
+@router.post("/auth/anonymous", response_model=AnonymousSessionResponse)
+async def start_anonymous_session(request: Request, session_data: AnonymousSessionStart):
     """
-    Anonymous kullanıcı için session başlatır.
-    Client IP ve User-Agent'tan unique ID oluşturur.
+    Starts an anonymous session. If an anonymous_id is provided and exists,
+    it resumes the session. Otherwise, it creates a new anonymous user.
     """
-    try:
-        from core.security import create_anonymous_user_id
-        anonymous_id = create_anonymous_user_id(request)
-        
-        print(f"🔄 Starting anonymous session: {anonymous_id[:16]}...")
-        
-        # Anonymous kullanıcıyı Firestore'a kaydet
-        user_ref = db.collection('users').document(anonymous_id)
+    user_id = session_data.anonymous_id
+    user_ref = None
+    user_doc = None
+
+    # Eğer bir anonymous_id gönderildiyse, o kullanıcıyı bulmayı dene
+    if user_id and user_id.startswith("anon_"):
+        print(f"Attempting to resume anonymous session for: {user_id}")
+        user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get()
-        
         if not user_doc.exists:
-            user_data = {
-                "type": "anonymous",
-                "plan": "anonymous",
-                "gender": user_info.gender or "unisex",
-                "language": user_info.language or "en",
-                "createdAt": firestore.SERVER_TIMESTAMP,
-                "profile_incomplete": True,
-                "usage": {
-                    "count": 0, 
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "rewarded_count": 0
-                },
-                "recent_outfits": []
-            }
-            user_ref.set(user_data)
-            print(f"✅ New anonymous user created in DB: {anonymous_id}")
-        else:
-            print(f"✅ Existing anonymous user found: {anonymous_id}")
+            print(f"Anonymous user {user_id} not found. Creating a new one.")
+            user_id = None  # Kullanıcı bulunamadıysa, yeni oluşturmak için user_id'yi sıfırla
+    
+    # Eğer user_id yoksa (ya hiç gönderilmedi ya da bulunamadı), yeni bir kullanıcı oluştur
+    if not user_id:
+        user_id = f"anon_{uuid.uuid4().hex[:16]}"
+        user_ref = db.collection('users').document(user_id)
+        print(f"Creating new anonymous user: {user_id}")
         
-        session_token = create_access_token(
-            data={"sub": anonymous_id, "type": "anonymous"},
-            expires_delta=timedelta(days=1)
-        )
-        
-        return {
-            "session_id": anonymous_id,
-            "access_token": session_token,
-            "token_type": "bearer",
-            "user_info": {
-                "uid": anonymous_id,
-                "type": "anonymous",
-                "plan": "anonymous",
-                "daily_limit": 1,
-                "gender": user_info.gender or "unisex",
-                "language": user_info.language or "en",
-                "is_anonymous": True,  # ← Bu field'ı ekleyin
-                "isAnonymous": True,   # ← Bu field'ı da ekleyin (client compatibility için)
-                "profile_complete": False
-            }
+        user_data = {
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "plan": "anonymous",
+            "language": session_data.language,
+            "gender": session_data.gender,
+            "profile_incomplete": True, # Yeni kullanıcıların profili her zaman eksiktir
+            "is_anonymous": True
         }
-        
-    except Exception as e:
-        print(f"Anonymous session error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start anonymous session"
-        )
+        user_ref.set(user_data)
+        user_doc = user_ref.get() # Yeni oluşturulan dokümanı al
+
+    # Bu noktada, user_ref ve user_doc'un geçerli olduğundan eminiz
+    user_info_dict = user_doc.to_dict()
+    
+    # Profil tamamlama durumunu veritabanındaki bilgilere göre tekrar hesapla
+    fullname = user_info_dict.get("fullname")
+    gender = user_info_dict.get("gender")
+    is_profile_complete = bool(fullname and gender and gender != 'unisex')
+
+    # Eğer veritabanındaki durum ile hesaplanan durum tutarsızsa, veritabanını güncelle
+    if user_info_dict.get("profile_incomplete") == is_profile_complete:
+         user_ref.update({"profile_incomplete": not is_profile_complete})
+
+    # Yanıt modelini oluştur
+    user_response = UserProfileResponse(
+        user_id=user_id,
+        fullname=user_info_dict.get("fullname"),
+        email=user_info_dict.get("email"),
+        gender=user_info_dict.get("gender"),
+        plan=user_info_dict.get("plan", "anonymous"),
+        usage=get_or_create_daily_usage(user_id),
+        created_at=user_info_dict.get("createdAt"),
+        isAnonymous=True,
+        profile_complete=is_profile_complete
+    )
+
+    # Bu kullanıcı için yeni bir token oluştur
+    access_token = create_access_token(data={"sub": user_id, "type": "anonymous"})
+    
+    return AnonymousSessionResponse(
+        session_id=user_id,
+        access_token=access_token,
+        user_info=user_response
+    )
 
 # YENİ: Anonymous kullanıcıdan authenticated kullanıcıya geçiş endpoint'i
 @router.post("/auth/convert-anonymous")
