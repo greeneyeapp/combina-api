@@ -175,7 +175,8 @@ async def start_anonymous_session(request: Request, session_data: AnonymousSessi
             "plan": "anonymous",
             "language": session_data.language,
             "gender": session_data.gender,
-            "profile_incomplete": True, # Yeni kullanıcıların profili her zaman eksiktir
+            # DÜZELTME: 'profile_incomplete' yerine 'profile_complete' kullanalım ve False olarak başlatalım
+            "profile_complete": False, 
             "is_anonymous": True
         }
         user_ref.set(user_data)
@@ -184,14 +185,15 @@ async def start_anonymous_session(request: Request, session_data: AnonymousSessi
     # Bu noktada, user_ref ve user_doc'un geçerli olduğundan eminiz
     user_info_dict = user_doc.to_dict()
     
-    # Profil tamamlama durumunu veritabanındaki bilgilere göre tekrar hesapla
+    # DÜZELTME: Profil tamamlama durumunu veritabanındaki bilgilere göre tekrar hesapla
     fullname = user_info_dict.get("fullname")
     gender = user_info_dict.get("gender")
     is_profile_complete = bool(fullname and gender and gender != 'unisex')
 
     # Eğer veritabanındaki durum ile hesaplanan durum tutarsızsa, veritabanını güncelle
-    if user_info_dict.get("profile_incomplete") == is_profile_complete:
-         user_ref.update({"profile_incomplete": not is_profile_complete})
+    # Bu, kullanıcının profilini tamamladıktan sonra tekrar giriş yaptığında doğru durumu almasını sağlar.
+    if user_info_dict.get("profile_complete") != is_profile_complete:
+         user_ref.update({"profile_complete": is_profile_complete})
 
     # Yanıt modelini oluştur
     user_response = UserProfileResponse(
@@ -203,7 +205,7 @@ async def start_anonymous_session(request: Request, session_data: AnonymousSessi
         usage=get_or_create_daily_usage(user_id),
         created_at=user_info_dict.get("createdAt"),
         isAnonymous=True,
-        profile_complete=is_profile_complete
+        profile_complete=is_profile_complete # Hesaplanan en güncel değeri gönder
     )
 
     # Bu kullanıcı için yeni bir token oluştur
