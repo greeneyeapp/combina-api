@@ -345,11 +345,10 @@ async def get_anonymous_status(
             detail="Failed to get anonymous status"
         )
 
-# Kullanıcı bilgi güncelleme endpoint'i (sadece authenticated kullanıcılar için)
 @router.post("/api/users/update-info")
 async def update_user_info(
     request_data: UserInfoUpdate,
-    user_id: str = Depends(require_authenticated_user)  # Anonymous kullanıcılar bu endpoint'i kullanamaz
+    user_id: str = Depends(require_authenticated_user)
 ):
     """Sadece authenticated kullanıcılar için bilgi güncelleme"""
     try:
@@ -362,16 +361,17 @@ async def update_user_info(
                 detail="User not found"
             )
         
-        # Bilgileri güncelle
+        # Bilgileri güncelle ve profili tamamlandı olarak işaretle
         update_data = {
             "fullname": request_data.name,
             "gender": request_data.gender,
-            "updatedAt": firestore.SERVER_TIMESTAMP
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "profile_incomplete": False  # <-- EKLENMESİ GEREKEN SATIR
         }
         
         user_ref.update(update_data)
         
-        return {"message": "User info updated successfully"}
+        return {"message": "User info updated successfully", "profile_complete": True}
         
     except Exception as e:
         print(f"Update user info error: {e}")
