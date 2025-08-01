@@ -1,4 +1,4 @@
-# core/security.py - Anonymous kullanıcı desteği eklendi
+# core/security.py
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -57,23 +57,35 @@ async def get_current_user_id(
     Returns: (user_id, is_anonymous)
     """
     if token:
-        # Token varsa authenticated user
+        # Token varsa decode et
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             user_id: str = payload.get("sub")
+            token_type: str = payload.get("type")  # ← Token tipini kontrol et
+            
             if user_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not validate credentials",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            return user_id, False  # Authenticated user
-        except JWTError:
+            
+            # Token'da type: "anonymous" varsa anonymous kullanıcı
+            if token_type == "anonymous" or user_id.startswith("anon_"):
+                print(f"🔍 Detected anonymous user via token: {user_id[:16]}...")
+                return user_id, True  # Anonymous user
+            else:
+                print(f"🔍 Detected authenticated user via token: {user_id[:16]}...")
+                return user_id, False  # Authenticated user
+                
+        except JWTError as e:
+            print(f"🔍 JWT decode error: {e}")
             # Token geçersizse anonim kullanıcı olarak devam et
             pass
     
     # Token yoksa veya geçersizse anonim kullanıcı
     anonymous_id = create_anonymous_user_id(request)
+    print(f"🔍 Created anonymous user ID: {anonymous_id[:16]}...")
     return anonymous_id, True
 
 # Geriye uyumluluk için eski fonksiyonu koruyalım
@@ -109,12 +121,23 @@ async def require_authenticated_user(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        
+        # Anonymous token'ları reddet
+        if token_type == "anonymous" or user_id.startswith("anon_"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authenticated user required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
         return user_id
     except JWTError:
         raise HTTPException(
