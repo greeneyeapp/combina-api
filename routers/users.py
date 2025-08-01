@@ -35,7 +35,7 @@ async def get_user_profile_universal(
     user_id, is_anonymous = user_data
     
     if is_anonymous:
-        # Anonymous kullanıcı için temel bilgiler döndür
+        # Anonymous kullanıcı için in-memory cache'den bilgiler döndür
         from routers.outfits import get_anonymous_user_usage, PLAN_LIMITS
         
         usage_data = get_anonymous_user_usage(user_id)
@@ -44,23 +44,33 @@ async def get_user_profile_universal(
         remaining = max(0, daily_limit - current_usage)
         percentage_used = (current_usage / daily_limit) * 100 if daily_limit > 0 else 0
         
+        print(f"✅ Serving anonymous profile for: {user_id[:16]}...")
+        
         return {
             "user_id": user_id,
             "type": "anonymous",
             "plan": "anonymous",
+            "fullname": None,
+            "email": None,
+            "gender": "unisex",  # Default for anonymous
             "usage": {
                 "daily_limit": daily_limit,
+                "rewarded_count": 0,
                 "current_usage": current_usage,
                 "remaining": remaining,
                 "percentage_used": round(percentage_used, 2),
                 "date": str(date.today())
             },
-            "is_anonymous": True,
+            "created_at": None,
+            "is_anonymous": True,        # ← Bu field'ı ekleyin
+            "isAnonymous": True,         # ← Bu field'ı da ekleyin (client compatibility için)
             "profile_complete": False
         }
     
     else:
-        # Authenticated kullanıcı (mevcut mantık)
+        # Authenticated kullanıcı (Firestore'dan veri çek)
+        print(f"✅ Serving authenticated profile for: {user_id[:16]}...")
+        
         user_ref = db.collection('users').document(user_id)
         user_doc = user_ref.get()
         
@@ -109,7 +119,8 @@ async def get_user_profile_universal(
                 "date": today_str
             },
             "created_at": user_data_dict.get("createdAt"),
-            "is_anonymous": False,
+            "is_anonymous": False,       # ← Bu field'ı ekleyin
+            "isAnonymous": False,        # ← Bu field'ı da ekleyin (client compatibility için)
             "profile_complete": bool(user_data_dict.get("fullname") and user_data_dict.get("gender"))
         }
 

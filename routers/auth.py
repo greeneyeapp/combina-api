@@ -150,7 +150,6 @@ async def start_anonymous_session(
     Client IP ve User-Agent'tan unique ID oluşturur.
     """
     try:
-        # Anonymous user ID oluştur (security.py'deki fonksiyonu kullanarak)
         from core.security import create_anonymous_user_id
         anonymous_id = create_anonymous_user_id(request)
         
@@ -161,7 +160,6 @@ async def start_anonymous_session(
         user_doc = user_ref.get()
         
         if not user_doc.exists:
-            # Yeni anonymous kullanıcı oluştur
             user_data = {
                 "type": "anonymous",
                 "plan": "anonymous",
@@ -181,10 +179,9 @@ async def start_anonymous_session(
         else:
             print(f"✅ Existing anonymous user found: {anonymous_id}")
         
-        # Anonymous kullanıcı için basit token oluştur (opsiyonel)
         session_token = create_access_token(
             data={"sub": anonymous_id, "type": "anonymous"},
-            expires_delta=timedelta(days=1)  # Anonymous token'lar 1 gün geçerli
+            expires_delta=timedelta(days=1)
         )
         
         return {
@@ -197,7 +194,10 @@ async def start_anonymous_session(
                 "plan": "anonymous",
                 "daily_limit": 1,
                 "gender": user_info.gender or "unisex",
-                "language": user_info.language or "en"
+                "language": user_info.language or "en",
+                "is_anonymous": True,  # ← Bu field'ı ekleyin
+                "isAnonymous": True,   # ← Bu field'ı da ekleyin (client compatibility için)
+                "profile_complete": False
             }
         }
         
