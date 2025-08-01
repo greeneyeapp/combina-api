@@ -57,22 +57,30 @@ async def get_current_user_id(
     Returns: (user_id, is_anonymous)
     """
     if token:
-        # Token varsa authenticated user
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             user_id: str = payload.get("sub")
+            
             if user_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not validate credentials",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            return user_id, False  # Authenticated user
+
+            # --- YENİ EKLENEN KONTROL ---
+            # Token payload'ında 'type' alanı 'anonymous' ise kullanıcı anonimdir.
+            user_type: Optional[str] = payload.get("type")
+            if user_type == "anonymous":
+                return user_id, True  # Token'ı olan anonim kullanıcı
+
+            return user_id, False  # Authenticated (kimliği doğrulanmış) kullanıcı
+            
         except JWTError:
-            # Token geçersizse anonim kullanıcı olarak devam et
+            # Token geçersizse veya yoksa, anonim kullanıcı olarak devam et
             pass
     
-    # Token yoksa veya geçersizse anonim kullanıcı
+    # Token yoksa veya geçersizse anonim kullanıcı oluştur
     anonymous_id = create_anonymous_user_id(request)
     return anonymous_id, True
 

@@ -62,8 +62,7 @@ async def get_user_profile_universal(
                 "date": str(date.today())
             },
             "created_at": None,
-            "is_anonymous": True,        # ← Bu field'ı ekleyin
-            "isAnonymous": True,         # ← Bu field'ı da ekleyin (client compatibility için)
+            "isAnonymous": True,
             "profile_complete": False
         }
     
