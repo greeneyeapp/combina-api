@@ -140,7 +140,6 @@ async def apple_auth(request: AppleAuthRequest):
             detail="Apple authentication failed."
         )
 
-# YENİ: Anonymous kullanıcı session başlatma endpoint'i
 @router.post("/auth/anonymous")
 async def start_anonymous_session(
     request: Request,
@@ -157,8 +156,31 @@ async def start_anonymous_session(
         
         print(f"🔄 Starting anonymous session: {anonymous_id[:16]}...")
         
+        # Anonymous kullanıcıyı Firestore'a kaydet
+        user_ref = db.collection('users').document(anonymous_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            # Yeni anonymous kullanıcı oluştur
+            user_data = {
+                "type": "anonymous",
+                "plan": "anonymous",
+                "gender": user_info.gender or "unisex",
+                "language": user_info.language or "en",
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "usage": {
+                    "count": 0, 
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "rewarded_count": 0
+                },
+                "recent_outfits": []
+            }
+            user_ref.set(user_data)
+            print(f"✅ New anonymous user created in DB: {anonymous_id}")
+        else:
+            print(f"✅ Existing anonymous user found: {anonymous_id}")
+        
         # Anonymous kullanıcı için basit token oluştur (opsiyonel)
-        # Bu token'ı client'ta saklayabilir, ama gerekli değil çünkü IP+UA'dan her zaman aynı ID üretiliyor
         session_token = create_access_token(
             data={"sub": anonymous_id, "type": "anonymous"},
             expires_delta=timedelta(days=1)  # Anonymous token'lar 1 gün geçerli
