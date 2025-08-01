@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body  # Body eklendi
 from datetime import timedelta, datetime
 from firebase_admin import firestore
 import requests
@@ -189,7 +189,7 @@ async def start_anonymous_session(
 @router.post("/auth/convert-anonymous")
 async def convert_anonymous_to_authenticated(
     request: Request,
-    conversion_data: dict = Body(...),
+    conversion_data: dict = Body(...),  # Bu satır artık çalışacak
     user_data: Tuple[str, bool] = Depends(get_current_user_id)
 ):
     """
@@ -277,6 +277,7 @@ async def convert_anonymous_to_authenticated(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to convert anonymous user"
         )
+
 @router.get("/auth/anonymous/status")
 async def get_anonymous_status(
     request: Request,
