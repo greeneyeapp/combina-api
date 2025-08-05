@@ -1,37 +1,28 @@
-# kodlar/core/usage.py
-
 import datetime
 from google.cloud import firestore
 from typing import Union
 from fastapi import Depends, HTTPException, status
 
-# Proje kökünden mutlak importlar kullanıyoruz
 from schemas import DailyUsage
 from core.security import get_current_user_id
 
-# Plan limitlerini merkezi bir yerde tanımlıyoruz
 PLAN_LIMITS = {
     "free": 2,
-    "anonymous": 1,
     "premium": "unlimited"
 }
 
 def get_or_create_daily_usage(user_id: str) -> DailyUsage:
-    """
-    Kullanıcının günlük kullanım hakkını Firestore'dan alır veya oluşturur.
-    """
-    # --- DÜZELTME: Döngüsel import'u kırmak için 'db' burada import edildi ---
     from main import db
 
     user_ref = db.collection('users').document(user_id)
     user_doc = user_ref.get()
     
     if not user_doc.exists:
-        plan = "anonymous"
+        plan = "free"
         user_data = {}
     else:
         user_data = user_doc.to_dict()
-        plan = user_data.get("plan", "anonymous")
+        plan = user_data.get("plan", "free")
 
     today_str = datetime.date.today().isoformat()
     usage_data = user_data.get("usage")
@@ -49,7 +40,7 @@ def get_or_create_daily_usage(user_id: str) -> DailyUsage:
         }
         user_ref.set({"usage": new_usage_data}, merge=True)
 
-    daily_limit = PLAN_LIMITS.get(plan, 1)
+    daily_limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
     
     if daily_limit == "unlimited":
         remaining = "unlimited"
@@ -69,10 +60,6 @@ def get_or_create_daily_usage(user_id: str) -> DailyUsage:
     )
 
 def increment_usage(user_id: str) -> None:
-    """
-    Kullanıcının o günkü kullanım sayısını 1 artırır.
-    """
-    # --- DÜZELTME: Döngüsel import'u kırmak için 'db' burada import edildi ---
     from main import db
 
     user_ref = db.collection('users').document(user_id)
@@ -101,9 +88,6 @@ def increment_usage(user_id: str) -> None:
     print(f"Usage for user {user_id} incremented to {new_usage_count}")
 
 async def check_usage_limit(user_id_tuple: tuple = Depends(get_current_user_id)):
-    """
-    Kullanıcının günlük limitini kontrol eden FastAPI dependency'si.
-    """
     user_id, is_anonymous = user_id_tuple
     usage_status = get_or_create_daily_usage(user_id)
     
@@ -117,8 +101,7 @@ async def check_usage_limit(user_id_tuple: tuple = Depends(get_current_user_id))
     return user_id
 
 def can_upgrade_plan(current_plan: str) -> dict:
-    """Kullanıcının yükseltebileceği planları döndürür"""
-    plans = ["free", "anonymous", "premium"]
+    plans = ["free", "premium"]
     
     if current_plan == "premium" or current_plan not in plans:
         return {
@@ -132,7 +115,6 @@ def can_upgrade_plan(current_plan: str) -> dict:
     available_upgrades = []
     for i in range(current_index + 1, len(plans)):
         plan = plans[i]
-        if plan == "anonymous": continue
         
         available_upgrades.append({
             "plan": plan,
